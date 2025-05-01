@@ -377,7 +377,34 @@ pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
-	return NULL;
+	pde_t* pde_entry;
+	pte_t* pgtbl, pte_entry;
+	struct PageInfo* new_page;
+
+	if(pgdir == NULL)
+		panic("pgdir_walk: NULL param\n");	
+	
+	pde_entry = &pgdir[PDX(va)];
+
+	if((*pde_entry & PTE_P) == 0){
+
+		if(!create)
+			return NULL;
+
+		new_page = page_alloc(ALLOC_ZERO);
+		if(new_page == NULL)
+			return NULL;
+		
+		new_page->pp_ref++;
+		
+		*pde_entry = page2pa(new_page) | PTE_P | PTE_W | PTE_U;
+	}
+
+	pgtbl = (pte_t*)KADDR(PTE_ADDR(*pde_entry));
+	
+	pte_entry = &pgtbl[PTX(va)];
+
+	return pte_entry;
 }
 
 //
@@ -395,6 +422,26 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 	// Fill this function in
+	assert((va % PGSIZE == 0) && (size % PGSIZE == 0) && (pa % PGSIZE == 0));
+
+	if(pgdir == NULL || va == NULL)
+		panic("boot_map_region: NULL param\n");
+
+	pte_t* pte_entry;
+	size_t num_of_pages, i;
+	int create;
+
+	num_of_pages = size / PGSIZE;
+	create = 1;
+
+	for(i = 0; i < num_of_pages; ++i, va += PGSIZE, pa += PGSIZE){
+
+		pte_entry = pgdir_walk(pgdir, (void*)va, create);
+		if(pte_entry == NULL)
+			panic("boot_map_region: out of memory\n");
+		
+		*pte_entry = pa | PTE_P | perm;
+	}
 }
 
 //
@@ -444,7 +491,23 @@ struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
-	return NULL;
+	pte_t* pte_entry;
+	int create;
+
+	if(pgdir == NULL)
+		panic("page_lookup: NULL param\n");
+
+	create = 0;
+	pte_entry = pgdir_walk(pgdir, va, create);
+
+	// if dir-entry not present or table-entry not present:
+	if(pte_entry == NULL || (*pte_entry & PTE_P) == 0)
+		return NULL;
+
+	if(pte_store != NULL)
+		*pte_store = pte_entry;
+				
+	return pa2page(*pte_entry);
 }
 
 //
@@ -452,8 +515,8 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 // If there is no physical page at that address, silently does nothing.
 //
 // Details:
-//   - The ref count on the physical page should decrement.
-//   - The physical page should be freed if the refcount reaches 0.
+//   page_decref	- The ref count on the physical page should decrement.
+//   			- The physical page should be freed if the refcount reaches 0.
 //   - The pg table entry corresponding to 'va' should be set to 0.
 //     (if such a PTE exists)
 //   - The TLB must be invalidated if you remove an entry from
@@ -466,6 +529,21 @@ void
 page_remove(pde_t *pgdir, void *va)
 {
 	// Fill this function in
+	struct PageInfo* pp;
+	pte_t* pte_store;
+
+	if(pgdir == NULL)
+		panic("page_remove: NULL param\n");
+
+	pp = page_lookup(pgdir, va, &pte_store);
+	if(pp == NULL)
+		return;
+
+	memset(pte_store, 0, sizeof(uintptr_t));
+
+	page_decref(pp);
+
+	tlb_invalidate(pgdir, va);
 }
 
 //
