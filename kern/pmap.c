@@ -378,7 +378,8 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
 	pde_t* pde_entry;
-	pte_t* pgtbl, pte_entry;
+	pte_t* pgtbl;
+	pte_t* pte_entry;
 	struct PageInfo* new_page;
 
 	if(pgdir == NULL)
@@ -424,7 +425,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	// Fill this function in
 	assert((va % PGSIZE == 0) && (size % PGSIZE == 0) && (pa % PGSIZE == 0));
 
-	if(pgdir == NULL || va == NULL)
+	if(pgdir == NULL || (void*)va == NULL)
 		panic("boot_map_region: NULL param\n");
 
 	pte_t* pte_entry;
@@ -473,6 +474,26 @@ int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
 	// Fill this function in
+	pte_t* pte_entry;
+	int create;
+
+	if(pgdir == NULL || pp == NULL)
+		panic("page_insert: NULL param\n");
+
+	create = 1;
+	pte_entry = pgdir_walk(pgdir, va, create);
+	if(pte_entry == NULL)
+		return -E_NO_MEM;
+	
+	// In case of double calling to insert we will increase pp_ref to be 2, 
+	// such that in the next statement we will not call to page_free by page_remove
+	pp->pp_ref++;
+
+	if(*pte_entry & PTE_P)
+		page_remove(pgdir, va);
+
+	*pte_entry = (pte_t)(page2pa(pp) | PTE_P | perm);
+
 	return 0;
 }
 
