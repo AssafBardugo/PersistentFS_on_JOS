@@ -188,6 +188,14 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	if(e == NULL)
+		panic("env_setup_vm: NULL param\n");
+
+	p->pp_ref++;
+	e->env_pgdir = (pde_t*)page2kva(p);
+
+	// Map [ULIM, 2^32) to the same physical address as for the kernel but without permission.
+	boot_map_region(e->env_pgdir, UTOP, ~(0) - UTOP + 1, PADDR(kern_pgdir[PDX(UTOP)]), PTE_P);
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -276,6 +284,7 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	
 }
 
 //
