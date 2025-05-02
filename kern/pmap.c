@@ -124,7 +124,7 @@ void
 mem_init(void)
 {
 	uint32_t cr0;
-	size_t n;
+	size_t pages_size, envs_size;
 
 	// Find out how much memory the machine has (npages & npages_basemem).
 	i386_detect_memory();
@@ -153,14 +153,18 @@ mem_init(void)
 	// array.  'npages' is the number of physical pages in memory.  Use memset
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
-	n = npages * sizeof(struct PageInfo);
+	pages_size = npages * sizeof(struct PageInfo);
 
-	pages = (struct PageInfo*)boot_alloc(n);
-	memset(pages, 0, n);
+	pages = (struct PageInfo*)boot_alloc(pages_size);
+	memset(pages, 0, pages_size);
 
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	envs_size = NENV * sizeof(struct Env);
+
+	envs = (struct Env*)boot_alloc(envs_size);
+	memset(envs, 0, envs_size);
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -184,7 +188,9 @@ mem_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir, UPAGES, ROUNDUP(n, PGSIZE), PADDR(pages), PTE_U);
+	pages_size = ROUNDUP(pages_size, PGSIZE);
+
+	boot_map_region(kern_pgdir, UPAGES, pages_size, PADDR(pages), PTE_U);
 
  
 	//////////////////////////////////////////////////////////////////////
@@ -194,6 +200,10 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+	envs_size = ROUNDUP(envs_size, PGSIZE);
+
+	boot_map_region(kern_pgdir, UENVS, envs_size, PADDR(envs), PTE_U);
+
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
