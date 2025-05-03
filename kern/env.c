@@ -188,14 +188,20 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	uint32_t entry;
+
 	if(e == NULL)
 		panic("env_setup_vm: NULL param\n");
 
 	p->pp_ref++;
+
 	e->env_pgdir = (pde_t*)page2kva(p);
 
-	// Map [ULIM, 2^32) to the same physical address as for the kernel but without permission.
-	boot_map_region(e->env_pgdir, UTOP, ~(0) - UTOP + 1, PADDR(kern_pgdir[PDX(UTOP)]), PTE_P);
+	// Map [UTOP, 2^32) to the same physical address as for the kernel but without permission.
+	for(entry = PDX(UTOP); entry < PGSIZE; entry += 4){
+
+		e->env_pgdir[entry] = PTE_ADDR(kern_pgdir[entry]) | PTE_P;
+	}
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -284,7 +290,36 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
-	
+	struct PageInfo* pp;
+	int insert_retval;
+	size_t num_of_pages, i;
+
+	if(e == NULL)
+		panic("region_alloc: NULL param\n");
+
+	num_of_pages = ROUNDUP(len, PGSIZE) / PGSIZE;
+	va = ROUNDDOWN(va, PGSIZE);
+
+	pp = page_lookup(e->env_pgdir, va, NULL);
+	if(pp && pp->pp_ref > 0){
+
+		panic("region_alloc: va addr is already in use\n");
+		// va += PGSIZE;
+	}
+
+	if((size_t)va + num_of_pages * PGSIZE > UTOP)
+		panic("region_alloc: (va + len) is above UTOP\n");
+
+	for(i = 0; i < num_of_pages; ++i, va += PGSIZE){
+
+		pp = page_alloc(!ALLOC_ZERO);
+		if(pp == NULL)
+			panic("region_alloc: out of memory\n");
+
+		insert_retval = page_insert(e->env_pgdir, pp, va, PTE_W | PTE_U);
+		if(insert_retval < 0)
+			panic("region_alloc: %e\n", insert_retval);
+	}
 }
 
 //
@@ -341,11 +376,40 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  What?  (See env_run() and env_pop_tf() below.)
 
 	// LAB 3: Your code here.
+	struct Elf* elf;
+	struct Proghdr* ph;
+	struct Proghdr* ph_end;
+	struct PageInfo* pp;
+
+	elf = (struct Elf*)binary;
+	if(elf->e_magic != ELF_MAGIC)
+		panic("load_icode: wrong binary param\n");
+
+	ph = (struct Proghdr*)(binary + elf->e_phoff);
+	ph_end = ph + elf->e_phnum;
+	
+	for(; ph < ph_end; ++ph){
+	
+		if(ph->p_type != ELF_PROG_LOAD)
+			continue;
+		
+		region_alloc(e, ph->p_va, ph->p_filesz);
+		
+		pp = page_lookup(e->env_pgdir, ph->p_va, NULL);
+		
+		memset(page2kva(pp), 0, ROUNDUP(ph->p_memsz));
+		
+		memcpy(ph->p_va, binary + ph->p_offset, ph->p_filesz);
+	}
+
+	// saving entry point
+	e->env_tf.tf_eip = elf->e_entry;
 
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
 
 	// LAB 3: Your code here.
+	region_alloc(e, USTACKTOP - PGSIZE, PGSIZE);
 }
 
 //
@@ -359,6 +423,19 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
+	struct Env* new_env;
+	int env_alloc_retval;
+	envid_t parent_id;
+
+	parent_id = 0;
+	env_alloc_retval = env_alloc(&new_env, parent_id);
+
+	if(env_alloc_retval != 0)
+		panic("env_create: env_alloc return %e\n", env_alloc_retval);
+
+	load_icode(new_env, binary);
+
+	new_env->env_type = type;	
 }
 
 //
