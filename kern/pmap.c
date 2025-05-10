@@ -227,7 +227,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir, KERNBASE, (~0) - KERNBASE + 1, 0, PTE_W);
+	boot_map_region(kern_pgdir, KERNBASE, (uint32_t)(~0) - KERNBASE + 1, 0, PTE_W);
 
 
 	// Check that the initial page directory has been set up correctly.
@@ -715,8 +715,6 @@ check_page_free_list(bool only_low_memory)
 
 	assert(nfree_basemem > 0);
 	assert(nfree_extmem > 0);
-
-	cprintf("check_page_free_list() succeeded!\n");
 }
 
 //

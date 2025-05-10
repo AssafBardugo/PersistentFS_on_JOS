@@ -116,7 +116,7 @@ env_init(void)
 {
 	// Set up envs array
 	// LAB 3: Your code here.
-	size_t idx;
+	int idx;
 	for(idx = NENV - 1; idx >= 0; --idx){
 
 		envs[idx].env_status = ENV_FREE;
@@ -125,7 +125,6 @@ env_init(void)
 		envs[idx].env_link = env_free_list;
 		env_free_list = &envs[idx];
 	}
-
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
@@ -164,7 +163,7 @@ env_init_percpu(void)
 static int
 env_setup_vm(struct Env *e)
 {
-	int i;
+	int dir_entry;
 	struct PageInfo *p = NULL;
 
 	// Allocate a page for the page directory
@@ -188,8 +187,6 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
-	uint32_t entry;
-
 	if(e == NULL)
 		panic("env_setup_vm: NULL param\n");
 
@@ -197,10 +194,16 @@ env_setup_vm(struct Env *e)
 
 	e->env_pgdir = (pde_t*)page2kva(p);
 
-	// Map [UTOP, 2^32) to the same physical address as for the kernel but without permission.
-	for(entry = PDX(UTOP); entry < PGSIZE; entry += 4){
+	// Map [ULIM, 2^32) to the same physical address as for the kernel but without permission.
+	for(dir_entry = PDX(ULIM); dir_entry < PDX(~0); ++dir_entry){
 
-		e->env_pgdir[entry] = PTE_ADDR(kern_pgdir[entry]) | PTE_P;
+		e->env_pgdir[dir_entry] = kern_pgdir[dir_entry];
+	}
+	
+	// Map [UTOP, ULIM) to the same physical address as for the kernel but only with R permission.
+	for(dir_entry = PDX(UTOP); dir_entry < PDX(ULIM); ++dir_entry){
+
+		e->env_pgdir[dir_entry] = kern_pgdir[dir_entry] | PTE_U;
 	}
 
 	// UVPT maps the env's own page table read-only.
@@ -292,31 +295,21 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   (Watch out for corner-cases!)
 	struct PageInfo* pp;
 	int insert_retval;
-	size_t num_of_pages, i;
+	size_t start_addr, end_addr;
 
-	if(e == NULL)
-		panic("region_alloc: NULL param\n");
+	end_addr = ROUNDUP((size_t)va + len, PGSIZE);
+	start_addr = ROUNDDOWN((size_t)va, PGSIZE);
 
-	num_of_pages = ROUNDUP(len, PGSIZE) / PGSIZE;
-	va = ROUNDDOWN(va, PGSIZE);
+	for(; start_addr < end_addr; start_addr += PGSIZE){
 
-	pp = page_lookup(e->env_pgdir, va, NULL);
-	if(pp && pp->pp_ref > 0){
+		if(page_lookup(e->env_pgdir, (void*)start_addr, NULL))
+			panic("region_alloc: va addr is already in use\n");
 
-		panic("region_alloc: va addr is already in use\n");
-		// va += PGSIZE;
-	}
-
-	if((size_t)va + num_of_pages * PGSIZE > UTOP)
-		panic("region_alloc: (va + len) is above UTOP\n");
-
-	for(i = 0; i < num_of_pages; ++i, va += PGSIZE){
-
-		pp = page_alloc(!ALLOC_ZERO);
+		pp = page_alloc(ALLOC_ZERO);
 		if(pp == NULL)
 			panic("region_alloc: out of memory\n");
 
-		insert_retval = page_insert(e->env_pgdir, pp, va, PTE_W | PTE_U);
+		insert_retval = page_insert(e->env_pgdir, pp, (void*)start_addr, PTE_W | PTE_U);
 		if(insert_retval < 0)
 			panic("region_alloc: %e\n", insert_retval);
 	}
@@ -380,27 +373,32 @@ load_icode(struct Env *e, uint8_t *binary)
 	struct Proghdr* ph;
 	struct Proghdr* ph_end;
 	struct PageInfo* pp;
+	uint32_t save_curr_pgdir;
+
+	if(e == NULL)
+		panic("load_icode: NULL param\n");
 
 	elf = (struct Elf*)binary;
 	if(elf->e_magic != ELF_MAGIC)
-		panic("load_icode: wrong binary param\n");
+		panic("load_icode: ELF_MAGIC is missing\n");
 
 	ph = (struct Proghdr*)(binary + elf->e_phoff);
 	ph_end = ph + elf->e_phnum;
-	
+
+	save_curr_pgdir = rcr3();
+	lcr3(PADDR(e->env_pgdir));
+
 	for(; ph < ph_end; ++ph){
 	
 		if(ph->p_type != ELF_PROG_LOAD)
 			continue;
 		
-		region_alloc(e, ph->p_va, ph->p_filesz);
-		
-		pp = page_lookup(e->env_pgdir, ph->p_va, NULL);
-		
-		memset(page2kva(pp), 0, ROUNDUP(ph->p_memsz));
-		
-		memcpy(ph->p_va, binary + ph->p_offset, ph->p_filesz);
+		region_alloc(e, (void*)ph->p_va, ph->p_memsz);
+	
+		memcpy((void*)ph->p_va, (void*)(binary + ph->p_offset), ph->p_filesz);
 	}
+
+	lcr3(save_curr_pgdir);
 
 	// saving entry point
 	e->env_tf.tf_eip = elf->e_entry;
@@ -409,7 +407,7 @@ load_icode(struct Env *e, uint8_t *binary)
 	// at virtual address USTACKTOP - PGSIZE.
 
 	// LAB 3: Your code here.
-	region_alloc(e, USTACKTOP - PGSIZE, PGSIZE);
+	region_alloc(e, (void*)(USTACKTOP - PGSIZE), PGSIZE);
 }
 
 //
@@ -426,6 +424,9 @@ env_create(uint8_t *binary, enum EnvType type)
 	struct Env* new_env;
 	int env_alloc_retval;
 	envid_t parent_id;
+
+	if(binary == NULL)
+		panic("env_create: NULL param\n");
 
 	parent_id = 0;
 	env_alloc_retval = env_alloc(&new_env, parent_id);
@@ -551,7 +552,24 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
+	if(e == NULL)
+		panic("env_run: NULL param\n");
 
-	panic("env_run not yet implemented");
+	if(curenv != NULL){
+
+		if(e == curenv)
+			panic("env_run: the given e is already running\n");
+
+		if(curenv->env_status == ENV_RUNNING)
+			curenv->env_status = ENV_RUNNABLE;
+	}
+
+	curenv = e;
+	e->env_status = ENV_RUNNING;
+	e->env_runs++;
+
+	lcr3(PADDR(e->env_pgdir));
+
+	env_pop_tf(&e->env_tf);
 }
 
