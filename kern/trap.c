@@ -65,14 +65,22 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
-
 void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
-
+	extern uint32_t traps[];
+	int i;
 	// LAB 3: Your code here.
-
+	for(i=0; i< 256; i++) {
+		//SETGATE(idt[i], 0, 0, trap_0, 0) // I think code segment selector should be 0, not sure + Not sure if should put ,manually all entries.
+		
+		if (i == T_SYSCALL || i == T_BRKPT)
+			SETGATE(idt[i], 0, GD_KT, traps[i], 3) // Syscall or user breakpoint, dpl =3, and is trap 
+		else {
+				SETGATE(idt[i], 0, GD_KT, traps[i], 0) // Kernel handlers 
+		}
+	}
 	// Per-CPU setup 
 	trap_init_percpu();
 }
@@ -173,6 +181,24 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+	int32_t ret_val;
+	if (tf->tf_trapno == T_PGFLT) {// Page fault support
+		cprintf("DEBUG: entered page_fault_handler\n");
+		page_fault_handler(tf);
+		return;
+	}
+	if (tf->tf_trapno == T_BRKPT) {// BREAK POINT support
+		monitor(tf);
+		return;
+	}
+	if (tf->tf_trapno == T_SYSCALL) {// SYSCALL support
+		ret_val = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx,
+			tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx,
+			tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+		tf->tf_regs.reg_eax = ret_val;	
+		return;
+	}
+
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
@@ -186,6 +212,8 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
+
+
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
@@ -268,7 +296,10 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
-
+	if ((tf->tf_cs & 3) == 0) {
+		// Trapped from kernel mode.
+		panic("page fault handler - page fault from kernel code\n");
+	}
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 
