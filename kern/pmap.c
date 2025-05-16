@@ -631,9 +631,51 @@ static uintptr_t user_mem_check_addr;
 int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
-	// LAB 3: Your code here.
-
-	return 0;
+	 size_t i;
+         pte_t *pte_ptr;
+         // LAB 3: Your code here.
+         size_t upper_pages_bound;
+         const void *rounded_down_va = ROUNDDOWN(va,PGSIZE);
+         //if ((uintptr_t)(va+len) >= ULIM) {
+         //      user_mem_check_addr = ULIM;
+         //      return -E_FAULT;
+         //}
+         upper_pages_bound = (ROUNDUP((va+len-rounded_down_va),PGSIZE)/PGSIZE);
+         for (i=0; i< upper_pages_bound; i++) {
+                 if ((uintptr_t)(va+i*PGSIZE) >= ULIM) {
+                         if (i ==0)
+                                 user_mem_check_addr = (uintptr_t)(va);
+                         else
+                                 user_mem_check_addr = (uintptr_t)(rounded_down_va+i*PGSIZE);
+                         return -E_FAULT;
+                 }
+                 pte_ptr = pgdir_walk(env->env_pgdir, rounded_down_va+i*PGSIZE, 0);
+                 if (pte_ptr == NULL) {
+                         //user_mem_check_addr = (uintptr_t)(va+i*PGSIZE);               
+                         if (i == 0)
+                                 user_mem_check_addr = (uintptr_t)va;
+                         else
+                                 user_mem_check_addr = (uintptr_t)(rounded_down_va+i*PGSIZE);
+                         return -E_FAULT;
+                 }
+                 if ((*pte_ptr & PTE_P) == 0) {
+                         //user_mem_check_addr = (uintptr_t)(va+i*PGSIZE);               
+                         if (i == 0)
+                                 user_mem_check_addr = (uintptr_t)va;
+                         else
+                                 user_mem_check_addr = (uintptr_t)(rounded_down_va+i*PGSIZE);
+                         return -E_FAULT;
+                 }
+                 if ((*pte_ptr & perm) != perm) {
+                         //user_mem_check_addr = (uintptr_t)(va+i*PGSIZE);               
+                         if (i == 0)
+                                 user_mem_check_addr = (uintptr_t)va;
+                         else
+                                 user_mem_check_addr = (uintptr_t)(rounded_down_va+i*PGSIZE);
+                         return -E_FAULT;
+                 }
+         }
+         return 0;
 }
 
 //

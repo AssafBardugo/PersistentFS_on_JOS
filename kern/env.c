@@ -557,11 +557,10 @@ env_run(struct Env *e)
 
 	if(curenv != NULL){
 
-		if(e == curenv)
-			panic("env_run: the given e is already running\n");
-
 		if(curenv->env_status == ENV_RUNNING)
 			curenv->env_status = ENV_RUNNABLE;
+		else
+			curenv->env_status = ENV_NOT_RUNNABLE;
 	}
 
 	curenv = e;
