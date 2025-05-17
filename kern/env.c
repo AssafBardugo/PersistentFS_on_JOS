@@ -541,6 +541,8 @@ env_pop_tf(struct Trapframe *tf)
 	// Record the CPU we are running on for user-space debugging
 	curenv->env_cpunum = cpunum();
 
+	unlock_kernel();
+
 	__asm __volatile("movl %0,%%esp\n"
 		"\tpopal\n"
 		"\tpopl %%es\n"
@@ -549,6 +551,8 @@ env_pop_tf(struct Trapframe *tf)
 		"\tiret"
 		: : "g" (tf) : "memory");
 	panic("iret failed");  /* mostly to placate the compiler */
+
+	// release the lock here will cause deadlock. because the lock will never free.
 }
 
 //
@@ -595,6 +599,16 @@ env_run(struct Env *e)
 
 	lcr3(PADDR(e->env_pgdir));
 
+	// release the kernel_lock before calling env_pop_tf can cause race condition.
+	// because current CPU will pause and the next lines will be run by another CPU
+	// and if we get trap before switching to user tf, 
+	// we will not acquire the lock again.
+	// and it can cause: 
+	// 	1. double free.
+	// 	2. calling kernel_unlock by a CPU that its not the lock owner.
+
 	env_pop_tf(&e->env_tf);
+
+	// release the lock here will cause deadlock. because the lock will never free.
 }
 
