@@ -29,7 +29,7 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
-	static int last_running; // first init to 0.
+	static int last_running = -1; // first env to run is 0.
 	int i;
 
 	for(i = 1; i < NENV; ++i){
