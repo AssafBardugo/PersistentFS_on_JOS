@@ -40,7 +40,7 @@ sched_yield(void)
 			continue;
 
 		idle->env_cpunum = thiscpu->cpu_id;
-		last_running = idle->env_id;
+		last_running = ENVX(idle->env_id);
 		env_run(idle);
 	}
 

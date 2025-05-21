@@ -587,13 +587,13 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
 	pte_t* pte_entry;
-	int create;
+	int not_create;
 
 	if(pgdir == NULL)
 		panic("page_lookup: NULL param\n");
 
-	create = 0;
-	pte_entry = pgdir_walk(pgdir, va, create);
+	not_create = 0;
+	pte_entry = pgdir_walk(pgdir, va, not_create);
 
 	// if dir-entry not present or table-entry not present:
 	if(pte_entry == NULL || (*pte_entry & PTE_P) == 0)
@@ -601,7 +601,7 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 
 	if(pte_store != NULL)
 		*pte_store = pte_entry;
-				
+	
 	return pa2page(*pte_entry);
 }
 
@@ -781,6 +781,7 @@ void
 user_mem_assert(struct Env *env, const void *va, size_t len, int perm)
 {
 	if (user_mem_check(env, va, len, perm | PTE_U) < 0) {
+
 		cprintf("[%08x] user_mem_check assertion failure for "
 			"va %08x\n", env->env_id, user_mem_check_addr);
 		env_destroy(env);	// may not return
