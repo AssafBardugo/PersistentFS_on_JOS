@@ -117,16 +117,17 @@ sys_env_set_status(envid_t envid, int status)
 	// envid's status.
 
 	// LAB 4: Your code here.
-	struct Env* e;
+	struct Env* env;
 	bool check_perm = 1;
 
 	if(status != ENV_RUNNABLE && status != ENV_NOT_RUNNABLE)
 		return -E_INVAL;
 
-	if(envid2env(envid, &e, check_perm) < 0)
+	if(envid2env(envid, &env, check_perm) < 0)
 		return -E_BAD_ENV;
 
-	e->env_status = status;
+	env->env_status = status;
+
 	return 0;
 }
 
@@ -142,7 +143,15 @@ static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
 	// LAB 4: Your code here.
-	panic("sys_env_set_pgfault_upcall not implemented");
+	struct Env* env;
+	bool check_perm = 1;
+
+	if(envid2env(envid, &env, check_perm) < 0)
+		return -E_BAD_ENV;
+
+	env->env_pgfault_upcall = func;
+
+	return 0;
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -388,9 +397,6 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		case SYS_exofork:
 			return sys_exofork();
 
-		case SYS_env_set_status:
-			return sys_env_set_status((envid_t)a1, (int)a2);
-
 		case SYS_page_alloc:
 			return sys_page_alloc((envid_t)a1, (void*)a2, (int)a3);
 
@@ -399,7 +405,13 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 
 		case SYS_page_unmap:
 			return sys_page_unmap((envid_t)a1, (void*)a2);
-		
+
+		case SYS_env_set_status:
+			return sys_env_set_status((envid_t) a1, (int)a2);
+	
+		case SYS_env_set_pgfault_upcall:
+			return sys_env_set_pgfault_upcall((envid_t)a1, (void*)a2);
+
 		default:
 			return -E_INVAL;
 	}
