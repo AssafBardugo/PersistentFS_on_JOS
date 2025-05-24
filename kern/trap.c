@@ -65,22 +65,21 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+extern uint32_t vectors[]; // in vectors.S: array of 256 entry pointers
+
 void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
-	extern uint32_t traps[];
 	int i;
+
 	// LAB 3: Your code here.
-	for(i=0; i< 256; i++) {
-		//SETGATE(idt[i], 0, 0, trap_0, 0) // I think code segment selector should be 0, not sure + Not sure if should put ,manually all entries.
-		
-		if (i == T_SYSCALL || i == T_BRKPT)
-			SETGATE(idt[i], 0, GD_KT, traps[i], 3) // Syscall or user breakpoint, dpl =3, and is trap 
-		else {
-			SETGATE(idt[i], 0, GD_KT, traps[i], 0) // Kernel handlers 
-		}
-	}
+	for (i = 0; i < 256; i++)
+		SETGATE(idt[i], 0, GD_KT, vectors[i], 0);
+	
+	SETGATE(idt[T_BRKPT],   0, GD_KT, vectors[T_BRKPT],   3);
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, vectors[T_SYSCALL], 3);
+
 	// Per-CPU setup 
 	trap_init_percpu();
 }
@@ -217,8 +216,11 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
-
-
+	if(tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER){
+		lapic_eoi();
+		sched_yield();
+		panic("sched_yield returns to trap_dispatch");
+	}
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
