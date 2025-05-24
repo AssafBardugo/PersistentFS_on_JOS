@@ -196,9 +196,12 @@ trap_dispatch(struct Trapframe *tf)
 	}
 
 	if (tf->tf_trapno == T_SYSCALL) {// SYSCALL support
-		ret_val = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx,
-			tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx,
-			tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+		ret_val = syscall(tf->tf_regs.reg_eax, 
+					tf->tf_regs.reg_edx,
+					tf->tf_regs.reg_ecx, 
+					tf->tf_regs.reg_ebx,
+					tf->tf_regs.reg_edi, 
+					tf->tf_regs.reg_esi);
 		tf->tf_regs.reg_eax = ret_val;	
 		return;
 	}

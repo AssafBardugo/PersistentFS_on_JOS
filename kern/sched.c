@@ -29,24 +29,25 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
-	static int last_running = -1; // first env to run is 0.
-	int i;
+	static int last_running_percpu[NCPU];
+	int i, last_running, cpuid;
 
-	for(i = 1; i < NENV; ++i){
+	cpuid = thiscpu->cpu_id;
+	last_running = (curenv) ? last_running_percpu[cpuid] : -1;
 
-		idle = &envs[(i + last_running) % NENV];
+	for(i = last_running + 1; i <= last_running + NENV; ++i){
+
+		idle = &envs[i % NENV];
+
+		if(curenv == idle && idle->env_status == ENV_RUNNING)
+			env_run(idle);
 
 		if(idle->env_status != ENV_RUNNABLE)
 			continue;
 
-		idle->env_cpunum = thiscpu->cpu_id;
-		last_running = ENVX(idle->env_id);
-		env_run(idle);
-	}
+		idle->env_cpunum = cpuid;
 
-	idle = &envs[last_running];
-
-	if(idle->env_status == ENV_RUNNING && idle->env_cpunum == thiscpu->cpu_id){
+		last_running_percpu[cpuid] = ENVX(idle->env_id);
 
 		env_run(idle);
 	}
