@@ -1,0 +1,85 @@
+=== This template file contains questions you need to answer.
+=== Fill your answers on appropriate blank lines only.
+=== Don't start any line with three equal signs "===".
+=== Don't edit any lines starting from three equal signs.
+=== Use C notation to write numbers: 42 for decimal, 0x2a for hexadecimal.
+=== We may check most of the answers automatically, so "forty two" or
+=== "26+16" won't work for this example. Spaces are mostly ignored, so
+=== "  42  " is OK (without quotes of course). 
+=== When asked to specify address & instruction, do it in the form of
+=== gdb output "ADDRESS: INSTRUCTION", for example "0x7c26:  or  $0x1,%eax"
+=== Don't make lines longer than 80 characters. You don't need to fit your
+=== answer in a single line, you can start a new line at will.
+=== However, when asked to fill "a table" make each table raw a singleline.
+
+=== Q Compare kern/mpentry.S side by side with boot/boot.S. Bearing in
+===   mind that kern/mpentry.S is compiled and linked to run above KERNBASE
+===   just like everything else in the kernel, what is the purpose of macro
+===   MPBOOTPHYS? Why is it necessary in kern/mpentry.S but not in
+===   boot/boot.S? In other words, what could go wrong if it were
+===   omitted in kern/mpentry.S?
+===   (free form)
+It is necessary because it is the code for the other cpu's, and we already
+have a cpu running, so not the entire physical memory is available for them.
+Unlike in boot/boot.s, that the first cpu can load it whereever it wants.
+The macro promises, that the address loaded is in offset to MPENTRY_PADDR,
+thus allowing us to load it at different physical addresses, and not hardcoding
+the location.
+=== Q It seems that using the big kernel lock guarantees that only one
+===   CPU can run the kernel code at a time. Why do we still need
+===   separate kernel stacks for each CPU? Describe a scenario in
+===   which using a shared kernel stack will go wrong, even with the
+===   protection of the big kernel lock.
+===   (free form)
+It will cause trouble in the following case: for example we are handling
+a page fault - CPU 1 handles the interrupt, but CPU 2, might context
+switch to the process waiting for the fault to be resolved.
+In the previous mechanism, the CPU running the process would return to him
+once its resolved, but here another CPU might return to it before its resolved
+which can cause another fault. So the layering in each CPU stack, protects us
+for software interrupts being handled before they are resolved (by the
+same CPU they occured on).
+=== Q Whenever the kernel switches from one environment to another, it
+===   must ensure the old environment's registers are saved so they
+===   can be restored properly later. Where does this happen?
+===   (JOS function name)
+_alltraps
+=== Q In your implementation of env_run() you should have called
+===   lcr3(). Before and after the call to lcr3(), your code makes
+===   references (at least it should) to the variable e, the argument
+===   to env_run. Upon loading the %cr3 register, the addressing
+===   context used by the MMU is instantly changed. But a virtual
+===   address (namely e) has meaning relative to a given address 
+===   context--the address context specifies the physical address to
+===   which the virtual address maps. Why can the pointer e be
+===   dereferenced both before and after the addressing switch?
+===   (one sentence, free form)
+e points to envs array, a kernel ds thats mapped the same in all pgdirs.
+=== Q In Ex. 9, what happens if the user environment runs out of
+===   space on the exception stack?
+===   (one setence, free form)
+It destroys the environment on user_mem_assert
+=== Q In dumpfork.c, the first time you call duppage(), the function
+===   allocates a page in one environment (env A) and then maps it in
+===   another (env B). At what address is the page mapped in env A, and
+===   at what address is it mapped in env B?
+===   (ADDR(in env A):ADDR(in env B) (example: 0xAAAAAAAA:0xBBBBBBBB)
+0X800000:0X400000
+====================================================================
+=== Q What challenge(s) have you chosen to implement? (specify
+===   challenge numbers separated by spaces, if more than one)
+6
+=== Q If the challenge requires changing the kernel source, list the
+===   files which you have changed/added during implementation.
+===   (one file per line, relative to lab directory containing .git/)
+lib/fork.c
+user/pingpongs.c
+user/forktree.c
+=== Q Describe you solution.
+===   (free form, up to 500 words, don't need to use all 500!)
+I've used the code I wrote for the fork, and adjusted it in 2 ways.
+The first: I made all writable pages with a write flag between a
+father and a child (instead of COW). And I adjusted the stack pages
+to be cow. Also I found a race condition bug in the pingpongs.c program
+which I solved. And used sfork in forktree.c instead of fork.
+No additional adjustments were needed.
