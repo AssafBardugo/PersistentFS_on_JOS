@@ -7,8 +7,6 @@
 // It is one of the bits explicitly allocated to user processes (PTE_AVAIL).
 #define PTE_COW		0x800
 
-int from_sfork = 0;
-
 //
 // Custom page fault handler - if faulting page is copy-on-write,
 // map in our own private writable copy.
@@ -76,14 +74,11 @@ duppage(envid_t envid, unsigned pn)
 	parent_envid = 0;
 	pgaddr = (void*)(pn << PGSHIFT); 
 
-	if(from_sfork)
-		goto only_cow;
-
 	switch(uvpt[pn] & (PTE_W | PTE_COW)){
 
 		case PTE_W:
 		case PTE_COW:
-only_cow:
+
 			if((r = sys_page_map(parent_envid, pgaddr, envid, pgaddr, PTE_P | PTE_U | PTE_COW)) < 0){
 
 				cprintf("duppage: sys_page_map return %e\n for the child\n", r);
@@ -178,59 +173,6 @@ fork(void)
 int
 sfork(void)
 {
-	from_sfork = 1;
-
-	envid_t envid;
-	int i,res;
-
-	set_pgfault_handler(pgfault);
-	envid = sys_exofork();
-	if (envid < 0)
-		panic ("fork - sys_exofork failed!\n");
-	if (envid == 0) {
-		// Handle this env
-		//thisenv = &envs[ENVX(sys_getenvid())];
-		return 0;
-	}
-	for (i = 0; i < UTOP; i+= PGSIZE) { // i is page number,
-	// using i as the index and 3DB in PDX as the flaf for UVPT
-		if ((uvpd[PDX(i)] & PTE_P) != 0 && (uvpd[PDX(i)] & PTE_U) != 0 &&(uvpt[PGNUM(i)] & PTE_P) != 0 && (uvpt[PGNUM(i)] & PTE_U) != 0) {
-			if (i == (UXSTACKTOP-PGSIZE)) { // allocate exception stack
-				res = sys_page_alloc(envid,(void*)(UXSTACKTOP-PGSIZE),PTE_W | PTE_P | PTE_U);
-				if (res != 0 )
-					panic ("fork - page alloc for exception stack failed\n");
-			}
-			else if (i == (USTACKTOP-PGSIZE)) {
-				res = duppage(envid,PGNUM(i));
-				if (res != 0)
-					panic ("fork failed on duppage for address:%x\n",i*PGSIZE);
-
-			}
-			else if (((uvpd[PDX(i)] & PTE_W) != 0 ) && ((uvpt[PGNUM(i)] & PTE_W) != 0 || (uvpt[PGNUM(i)] & PTE_COW) != 0)) {
-				// call duppage
-				 res = sys_page_map(0,(void*)(i),envid,(void*)(i), PTE_P | PTE_U | PTE_W);
-
-				//res = duppage(envid,PGNUM(i));
-				if (res != 0)
-					panic ("fork failed on duppage for address:%x\n",i*PGSIZE);
-			}
-			else if ((uvpt[PGNUM(i)] & PTE_P) != 0 && (uvpt[PGNUM(i)] & PTE_U) != 0) {
-				// just map child to same physical page
-				res = sys_page_map(0,(void*)(i),envid,(void*)(i), PTE_P | PTE_U);
-				if (res != 0 )
-					panic ("fork - page mapping for non writeable page failed\n");
-			}
-		}
-	}
-
-	res = sys_env_set_pgfault_upcall(envid,envs[ENVX(sys_getenvid())].env_pgfault_upcall);
-	if (res != 0 )
-		panic("fork - sys_env_set_pgfault_upcall - failed!\n");
-	res = sys_env_set_status(envid,ENV_RUNNABLE);
-
-	if (res != 0 )
-		panic("fork - sys_env_set_status - failed!\n");
-	return envid;
-	//return -E_INVAL;
+	return 0;
 }
 
