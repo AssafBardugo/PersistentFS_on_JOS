@@ -57,7 +57,6 @@ pgfault(struct UTrapframe *utf)
 // marked copy-on-write as well.  (Exercise: Why do we need to mark ours
 // copy-on-write again if it was already copy-on-write at the beginning of
 // this function? 
-// ************ANSWER: )
 //
 // Returns: 0 on success, < 0 on error.
 // It is also OK to panic on error.
@@ -173,6 +172,7 @@ fork(void)
 int
 sfork(void)
 {
+	panic("sfork not implemented yet\n");
 	return 0;
 }
 
