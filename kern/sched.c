@@ -29,6 +29,28 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
+	static int last_running_percpu[NCPU];
+	int i, last_running, cpuid;
+
+	cpuid = thiscpu->cpu_id;
+	last_running = (curenv) ? last_running_percpu[cpuid] : -1;
+
+	for(i = last_running + 1; i <= last_running + NENV; ++i){
+
+		idle = &envs[i % NENV];
+
+		if(curenv == idle && idle->env_status == ENV_RUNNING)
+			env_run(idle);
+
+		if(idle->env_status != ENV_RUNNABLE)
+			continue;
+
+		idle->env_cpunum = cpuid;
+
+		last_running_percpu[cpuid] = ENVX(idle->env_id);
+
+		env_run(idle);
+	}
 
 	// sched_halt never returns
 	sched_halt();

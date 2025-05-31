@@ -119,7 +119,15 @@ env_init(void)
 {
 	// Set up envs array
 	// LAB 3: Your code here.
+	int idx;
+	for(idx = NENV - 1; idx >= 0; --idx){
 
+		envs[idx].env_status = ENV_FREE;
+		envs[idx].env_id = 0;
+		
+		envs[idx].env_link = env_free_list;
+		env_free_list = &envs[idx];
+	}
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
@@ -158,7 +166,7 @@ env_init_percpu(void)
 static int
 env_setup_vm(struct Env *e)
 {
-	int i;
+	int dir_entry;
 	struct PageInfo *p = NULL;
 
 	// Allocate a page for the page directory
@@ -182,6 +190,24 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	if(e == NULL)
+		panic("env_setup_vm: NULL param\n");
+
+	p->pp_ref++;
+
+	e->env_pgdir = (pde_t*)page2kva(p);
+
+	// Map [ULIM, 2^32) to the same physical address as for the kernel but without permission.
+	for(dir_entry = PDX(ULIM); dir_entry < PDX(~0); ++dir_entry){
+
+		e->env_pgdir[dir_entry] = kern_pgdir[dir_entry];
+	}
+	
+	// Map [UTOP, ULIM) to the same physical address as for the kernel but only with R permission.
+	for(dir_entry = PDX(UTOP); dir_entry < PDX(ULIM); ++dir_entry){
+
+		e->env_pgdir[dir_entry] = kern_pgdir[dir_entry] | PTE_U;
+	}
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -247,6 +273,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 
 	// Enable interrupts while in user mode.
 	// LAB 4: Your code here.
+	e->env_tf.tf_eflags = FL_IF;
 
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
@@ -279,6 +306,26 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	struct PageInfo* pp;
+	int insert_retval;
+	size_t start_addr, end_addr;
+
+	end_addr = ROUNDUP((size_t)va + len, PGSIZE);
+	start_addr = ROUNDDOWN((size_t)va, PGSIZE);
+
+	for(; start_addr < end_addr; start_addr += PGSIZE){
+
+		if(page_lookup(e->env_pgdir, (void*)start_addr, NULL))
+			panic("region_alloc: va addr is already in use\n");
+
+		pp = page_alloc(ALLOC_ZERO);
+		if(pp == NULL)
+			panic("region_alloc: out of memory\n");
+
+		insert_retval = page_insert(e->env_pgdir, pp, (void*)start_addr, PTE_W | PTE_U);
+		if(insert_retval < 0)
+			panic("region_alloc: %e\n", insert_retval);
+	}
 }
 
 //
@@ -335,11 +382,45 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  What?  (See env_run() and env_pop_tf() below.)
 
 	// LAB 3: Your code here.
+	struct Elf* elf;
+	struct Proghdr* ph;
+	struct Proghdr* ph_end;
+	struct PageInfo* pp;
+	uint32_t save_curr_pgdir;
+
+	if(e == NULL)
+		panic("load_icode: NULL param\n");
+
+	elf = (struct Elf*)binary;
+	if(elf->e_magic != ELF_MAGIC)
+		panic("load_icode: ELF_MAGIC is missing\n");
+
+	ph = (struct Proghdr*)(binary + elf->e_phoff);
+	ph_end = ph + elf->e_phnum;
+
+	save_curr_pgdir = rcr3();
+	lcr3(PADDR(e->env_pgdir));
+
+	for(; ph < ph_end; ++ph){
+	
+		if(ph->p_type != ELF_PROG_LOAD)
+			continue;
+		
+		region_alloc(e, (void*)ph->p_va, ph->p_memsz);
+	
+		memcpy((void*)ph->p_va, (void*)(binary + ph->p_offset), ph->p_filesz);
+	}
+
+	lcr3(save_curr_pgdir);
+
+	// saving entry point
+	e->env_tf.tf_eip = elf->e_entry;
 
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
 
 	// LAB 3: Your code here.
+	region_alloc(e, (void*)(USTACKTOP - PGSIZE), PGSIZE);
 }
 
 //
@@ -353,6 +434,22 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
+	struct Env* new_env;
+	int env_alloc_retval;
+	envid_t parent_id;
+
+	if(binary == NULL)
+		panic("env_create: NULL param\n");
+
+	parent_id = 0;
+	env_alloc_retval = env_alloc(&new_env, parent_id);
+
+	if(env_alloc_retval != 0)
+		panic("env_create: env_alloc return %e\n", env_alloc_retval);
+
+	load_icode(new_env, binary);
+
+	new_env->env_type = type;	
 
 	// If this is the file server (type == ENV_TYPE_FS) give it I/O privileges.
 	// LAB 5: Your code here.
@@ -448,6 +545,8 @@ env_pop_tf(struct Trapframe *tf)
 	// Record the CPU we are running on for user-space debugging
 	curenv->env_cpunum = cpunum();
 
+	unlock_kernel();
+
 	__asm __volatile("movl %0,%%esp\n"
 		"\tpopal\n"
 		"\tpopl %%es\n"
@@ -456,6 +555,8 @@ env_pop_tf(struct Trapframe *tf)
 		"\tiret"
 		: : "g" (tf) : "memory");
 	panic("iret failed");  /* mostly to placate the compiler */
+
+	// release the lock here will cause deadlock. because the lock will never free.
 }
 
 //
@@ -485,7 +586,33 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
+	if(e == NULL)
+		panic("env_run: NULL param\n");
 
-	panic("env_run not yet implemented");
+	if(curenv != NULL){
+
+		if(curenv->env_status == ENV_RUNNING)
+			curenv->env_status = ENV_RUNNABLE;
+		else
+			curenv->env_status = ENV_NOT_RUNNABLE;
+	}
+
+	curenv = e;
+	e->env_status = ENV_RUNNING;
+	e->env_runs++;
+
+	lcr3(PADDR(e->env_pgdir));
+
+	// release the kernel_lock before calling env_pop_tf can cause race condition.
+	// because current CPU will pause and the next lines will be run by another CPU
+	// and if we get trap before switching to user tf, 
+	// we will not acquire the lock again.
+	// and it can cause: 
+	// 	1. double free.
+	// 	2. calling kernel_unlock by a CPU that its not the lock owner.
+
+	env_pop_tf(&e->env_tf);
+
+	// release the lock here will cause deadlock. because the lock will never free.
 }
 
