@@ -453,6 +453,8 @@ env_create(uint8_t *binary, enum EnvType type)
 
 	// If this is the file server (type == ENV_TYPE_FS) give it I/O privileges.
 	// LAB 5: Your code here.
+	if(new_env->env_type == ENV_TYPE_FS)
+		new_env->env_tf.tf_eflags |= FL_IOPL_3;
 }
 
 //

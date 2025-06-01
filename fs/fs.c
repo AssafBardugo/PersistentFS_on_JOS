@@ -43,7 +43,8 @@ free_block(uint32_t blockno)
 	// Blockno zero is the null pointer of block numbers.
 	if (blockno == 0)
 		panic("attempt to free zero block");
-	bitmap[blockno/32] |= 1<<(blockno%32);
+
+	bitmap[blockno / 32] |= (1 << (blockno % 32));
 }
 
 // Search the bitmap for a free block and allocate it.  When you
@@ -62,7 +63,20 @@ alloc_block(void)
 	// super->s_nblocks blocks in the disk altogether.
 
 	// LAB 5: Your code here.
-	panic("alloc_block not implemented");
+	uint32_t blockno;
+
+	for(blockno = 3; blockno < super->s_nblocks; ++blockno){
+
+		if(!block_is_free(blockno))
+			continue;
+
+		bitmap[blockno / 32] &= ~(1 << (blockno % 32));
+
+		flush_block(&bitmap[blockno / 32]);
+		
+		return blockno;
+	}		
+
 	return -E_NO_DISK;
 }
 
