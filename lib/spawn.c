@@ -91,8 +91,17 @@ spawn(const char *prog, const char **argv)
 
 	// Read elf header
 	elf = (struct Elf*) elf_buf;
-	if (readn(fd, elf_buf, sizeof(elf_buf)) != sizeof(elf_buf)
-	    || elf->e_magic != ELF_MAGIC) {
+
+	if((r = readn(fd, elf_buf, sizeof(elf_buf))) != sizeof(elf_buf)){
+
+		close(fd);
+		cprintf("spawn: readn return %d\n", r);
+		return r;
+	}
+			
+			
+	if(elf->e_magic != ELF_MAGIC) {
+
 		close(fd);
 		cprintf("elf magic %08x want %08x\n", elf->e_magic, ELF_MAGIC);
 		return -E_NOT_EXEC;
@@ -304,6 +313,22 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	uint32_t addr;
+	int r;
+	envid_t parent_envid = 0;
+
+	for(addr = 0; addr < UXSTACKTOP - PGSIZE; addr += PGSIZE){
+	
+		if(!(uvpd[PDX(addr)] & PTE_P) || !(uvpt[PGNUM(addr)] & PTE_P))
+	        	continue;
+
+		if(!(uvpt[PGNUM(addr)] & PTE_SHARE))
+			continue;
+
+		if((r = sys_page_map(parent_envid, (void*)addr, child, (void*)addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
+			return r;
+       	}
+
 	return 0;
 }
 

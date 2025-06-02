@@ -73,31 +73,24 @@ duppage(envid_t envid, unsigned pn)
 	parent_envid = 0;
 	pgaddr = (void*)(pn << PGSHIFT); 
 
-	switch(uvpt[pn] & (PTE_W | PTE_COW)){
+	if(uvpt[pn] & PTE_SHARE){
 
-		case PTE_W:
-		case PTE_COW:
+		if((r = sys_page_map(parent_envid, pgaddr, envid, pgaddr, uvpt[pn] & PTE_SYSCALL)) < 0)
+			return r;
+	}
 
-			if((r = sys_page_map(parent_envid, pgaddr, envid, pgaddr, PTE_P | PTE_U | PTE_COW)) < 0){
+	else if(uvpt[pn] & (PTE_W | PTE_COW)){
 
-				cprintf("duppage: sys_page_map return %e\n for the child\n", r);
-				return r;
-			}
+		if((r = sys_page_map(parent_envid, pgaddr, envid, pgaddr, PTE_P | PTE_U | PTE_COW)) < 0)
+			return r;
 		
-			if((r = sys_page_map(parent_envid, pgaddr, parent_envid, pgaddr, PTE_P | PTE_U | PTE_COW)) < 0){
+		if((r = sys_page_map(parent_envid, pgaddr, parent_envid, pgaddr, PTE_P | PTE_U | PTE_COW)) < 0)
+			return r;
+	}
 
-				cprintf("duppage: sys_page_map return %e\n for the parent\n", r);
-				return r;
-			}
-
-			break;
-
-		default:
-			if((r = sys_page_map(parent_envid, pgaddr, envid, pgaddr, PTE_P | PTE_U)) < 0){
-
-				cprintf("duppage: sys_page_map return %e\n for RO map\n", r);
-				return r;
-			}
+	else{ 
+		if((r = sys_page_map(parent_envid, pgaddr, envid, pgaddr, PTE_P | PTE_U)) < 0)
+			return r;
 	}
 
 	return 0;
