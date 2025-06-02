@@ -217,6 +217,7 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	if(page_insert(env->env_pgdir, pp, va, perm) == 0)
 		return 0;
 
+	// page_insert fail
 	page_free(pp);
 	return -E_NO_MEM;
 }

@@ -55,7 +55,7 @@ bc_pgfault(struct UTrapframe *utf)
 //	envid_t fsenv_id;
 //	struct Env* fsenv;
 	
-//	if((pp = page_alloc(0)) == NULL)
+//	if((pp = page_alloc(ALLOC_ZERO)) == NULL)
 //		panic("bc_pgfault: page_alloc return out-of-memory\n");
 //
 //	if((fsenv_id = ipc_find_env(ENV_TYPE_FS)) == 0)
@@ -63,7 +63,7 @@ bc_pgfault(struct UTrapframe *utf)
 
 //	fsenv = &envs[ENVX(fsenv_id)];
 //
-//	if((r = page_insert(fsenv->env_pgdir, pp, addr, PTE_W | PTE_U)) < 0)
+//	if((r = page_insert(curenv->env_pgdir, pp, addr, PTE_W | PTE_U)) < 0)
 //		panic("bc_pgfault: page_insert return %e\n", r);
 
 	if((r = sys_page_alloc(0, addr, PTE_P | PTE_W | PTE_U)) < 0)
