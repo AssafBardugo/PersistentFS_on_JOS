@@ -383,9 +383,12 @@ file_read(struct File *f, void *buf, size_t count, off_t offset)
 	count = MIN(count, f->f_size - offset);
 
 	for (pos = offset; pos < offset + count; ) {
+
 		if ((r = file_get_block(f, pos / BLKSIZE, &blk)) < 0)
 			return r;
+
 		bn = MIN(BLKSIZE - pos % BLKSIZE, offset + count - pos);
+
 		memmove(buf, blk + pos % BLKSIZE, bn);
 		pos += bn;
 		buf += bn;
