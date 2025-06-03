@@ -14,28 +14,37 @@
 
 === Q How much disk space can be addressed by a single bitmap block
 ===   when size of a block is 4KB? (number in _bytes_)
+134217728
 
 === Q How much disk space can be addressed by a single bitmap block
 ===   when size of a block is 512B? (number in _bytes_)
+2097152
 
 === Q What is a maximum supported file size in JOS FS? (number in _bytes_)
+4235264
 
 === Q Did you have to do anything else to ensure that the I/O
 ===   privilege setting is saved and restored properly when you
 ===   subsequently switch from one environment to another? Why? 
 ===   (free form)
+No. Because the tf_eflags is stored with the Env struct, 
+and the kernel will restore the state of it with each context switch.
 
 === Q How long approximately did it take you to do this lab?
 ===   (number of hours for all partners combined)
+20
 
 ====================================================================
 === Q What challenge(s) have you chosen to implement? (specify
 ===   challenge numbers separated by spaces, if more than one)
+2
 
 === Q If the challenge requires changing the kernel source, list the
 ===   files which you have changed/added during implementation.
 ===   (one file per line, relative to lab directory containing .git/)
 
+
 === Q Describe you solution.
 ===   (free form, up to 500 words, don't need to use all 500!)
+
 
