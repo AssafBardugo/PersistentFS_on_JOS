@@ -27,6 +27,7 @@ bool	va_is_mapped(void *va);
 bool	va_is_dirty(void *va);
 void	flush_block(void *addr);
 void	bc_init(void);
+void 	garbage_collector(void); // Challenge
 
 /* fs.c */
 void	fs_init(void);

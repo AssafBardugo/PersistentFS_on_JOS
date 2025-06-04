@@ -50,22 +50,6 @@ bc_pgfault(struct UTrapframe *utf)
 	// LAB 5: you code here:
 	addr = ROUNDDOWN(addr, PGSIZE);
 	
-//	struct PageInfo* pp;
-
-//	envid_t fsenv_id;
-//	struct Env* fsenv;
-	
-//	if((pp = page_alloc(ALLOC_ZERO)) == NULL)
-//		panic("bc_pgfault: page_alloc return out-of-memory\n");
-//
-//	if((fsenv_id = ipc_find_env(ENV_TYPE_FS)) == 0)
-//		panic("bc_pgfault: can't find fs env\n");
-
-//	fsenv = &envs[ENVX(fsenv_id)];
-//
-//	if((r = page_insert(curenv->env_pgdir, pp, addr, PTE_W | PTE_U)) < 0)
-//		panic("bc_pgfault: page_insert return %e\n", r);
-
 	if((r = sys_page_alloc(0, addr, PTE_P | PTE_W | PTE_U)) < 0)
 		panic("bc_pgfault: sys_page_alloc return %e\n", r);
 
@@ -154,5 +138,83 @@ bc_init(void)
 
 	// cache the super block by reading it once
 	memmove(&super, diskaddr(1), sizeof super);
+}
+
+
+#define DEBUG_GC 0
+
+/****** Challenge: ******/
+// This function is called from fs/serv.c:359
+//
+// The purpose of this function is to prevent an "out of memory" situation due to the cache, 
+// by clearing blocks from the cache if they have not been used for a long time.
+void
+garbage_collector(void)
+{
+	envid_t curenv_id = 0;
+	uint32_t blockno;
+	void* addr;
+	bool page_was_accessed;
+	int r;
+	uint32_t nbitblocks;
+
+#if DEBUG_GC
+	static uint8_t blkctr[1024] = {0};
+	static int call_ctr;
+	static int blocks_removed_ctr;
+	++call_ctr;
+#endif
+
+	// We want to make sure we don't unmap a bitmap block.
+	nbitblocks = (super->s_nblocks + BLKBITSIZE - 1) / BLKBITSIZE;
+
+	// Go through all the blocks, 
+	// if you find a block that has not been accessed since 
+	// the last time this function was called, 
+	// write it to disk (if necessary) and return the page to the free_list.
+	for(blockno = 2 + nbitblocks; blockno < super->s_nblocks; ++blockno){
+
+		// If the block is free, continue.
+		if(bitmap[blockno / 32] & (1 << (blockno % 32)))
+			continue;
+
+		addr = diskaddr(blockno);
+
+		// If the block is not yet mapped, continue.
+		if(!(uvpd[PDX(addr)] & PTE_P) || !(uvpt[PGNUM(addr)] & PTE_P))
+			continue;
+
+		page_was_accessed = uvpt[PGNUM(addr)] & PTE_A;
+
+		// Flush the contents of the block out to disk if necessary, 
+		// and clear the Dirty and Accessed bits using sys_page_map.
+		// So that next time we can check if it turns back on.
+		flush_block(addr);
+
+		if(!page_was_accessed)
+			continue;
+
+		// sys_page_unmap will call page_remove
+		if((r = sys_page_unmap(curenv_id, addr)) < 0)
+			panic("garbage_collector: sys_page_unmap return %e for addr %08x\n", r, addr);
+
+		// We do not mark the block as free because from the file system's perspective the block is still in use.	
+
+#if DEBUG_GC
+		++blkctr[blockno];
+		++blocks_removed_ctr;
+#endif
+	}
+
+#if DEBUG_GC
+	cprintf("DEBUG: GC called for the %d time and remove so far %d blocks\n", call_ctr, blocks_removed_ctr);
+
+	cprintf("GC statistic:\n");
+	for(blockno = 3; blockno < 1024; ++blockno){
+
+		if(blkctr[blockno] > 0)
+			cprintf("block %d removed %d times\n", blockno, blkctr[blockno]);
+	}
+#endif
 }
 

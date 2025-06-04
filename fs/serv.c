@@ -324,6 +324,7 @@ serve(void)
 	uint32_t req, whom;
 	int perm, r;
 	void *pg;
+	int call_ctr = 0; // Challenge
 
 	while (1) {
 		perm = 0;
@@ -349,8 +350,16 @@ serve(void)
 		}
 		ipc_send(whom, r, pg, perm);
 		sys_page_unmap(0, fsreq);
+
+		// Challenge
+		if(++call_ctr > 1000){
+
+			garbage_collector();	// Implemented in fs/bc.c
+			call_ctr = 0;
+		}
 	}
 }
+
 
 void
 umain(int argc, char **argv)
