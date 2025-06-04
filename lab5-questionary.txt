@@ -32,7 +32,7 @@ and the kernel will restore the state of it with each context switch.
 
 === Q How long approximately did it take you to do this lab?
 ===   (number of hours for all partners combined)
-20
+25
 
 ====================================================================
 === Q What challenge(s) have you chosen to implement? (specify
@@ -42,9 +42,21 @@ and the kernel will restore the state of it with each context switch.
 === Q If the challenge requires changing the kernel source, list the
 ===   files which you have changed/added during implementation.
 ===   (one file per line, relative to lab directory containing .git/)
-
+fs/bc.c
+fs/serv.c
+fs/fs.h
 
 === Q Describe you solution.
 ===   (free form, up to 500 words, don't need to use all 500!)
+My solution was to implement a Garbage Collector that remove blocks from
+the blocks-cache if we assume that the block will not be accessed again.
 
+The assumption is by checking the PTE_A bit once in 1000 iterations of serve() loop.
+If the bit was set in that time, we unset it with the help of calling flush_block(),
+so we can know next time if there was another access.
+Otherwise, we call sys_page_unmap which will call page_remove.
+
+I choose to call the GC once every 1000 iterations because if we call it
+more often, we will harm the performance of the OS by freeing blocks unnecessarily
+and causing a lot of page faults. 
 
