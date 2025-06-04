@@ -141,7 +141,7 @@ bc_init(void)
 }
 
 
-#define DEBUG_GC 0
+#define DEBUG_GC	0
 
 /****** Challenge: ******/
 // This function is called from fs/serv.c:359
