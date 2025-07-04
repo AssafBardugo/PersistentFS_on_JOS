@@ -89,7 +89,7 @@ alloc(uint32_t bytes)
 }
 
 void
-opendisk(const char *name)
+opendisk(const char *name) // getting name=fs.img
 {
 	int r, diskfd, nbitblocks;
 
@@ -107,10 +107,14 @@ opendisk(const char *name)
 	close(diskfd);
 
 	diskpos = diskmap;
-	alloc(BLKSIZE);
-	super = alloc(BLKSIZE);
+	alloc(BLKSIZE);	// for Boot sector and patition table
+	super = alloc(BLKSIZE);	// Superblock
 	super->s_magic = FS_MAGIC;
 	super->s_nblocks = nblocks;
+	
+	super->last_ts = 0;	// PROJECT: initialize timestamp
+	// Note: last_ts will init to 0 everytime fsformat.c will change or relevant OBJ files will remove.
+	
 	super->s_root.f_type = FTYPE_DIR;
 	strcpy(super->s_root.f_name, "/");
 
@@ -145,6 +149,7 @@ finishfile(struct File *f, uint32_t start, uint32_t len)
 		for (; i < len / BLKSIZE; ++i)
 			ind[i - NDIRECT] = start + i;
 	}
+	f->f_timestamp = 0;	// PROJECT: A file that existed at the time the FS was created is given a ts 0
 }
 
 void
@@ -220,7 +225,11 @@ main(int argc, char **argv)
 {
 	int i;
 	char *s;
-	struct Dir root;
+	struct Dir root;	
+
+	struct File* pfs_ff; 	// PROJECT
+	struct File* pfs0; 	// PROJECT
+	struct Dir pfs_dir; 	// PROJECT
 
 	assert(BLKSIZE % sizeof(struct File) == 0);
 
@@ -236,9 +245,23 @@ main(int argc, char **argv)
 	startdir(&super->s_root, &root);
 	for (i = 3; i < argc; i++)
 		writefile(&root, argv[i]);
+
+// PROJECT: start
+	pfs_ff = diradd(&root, FTYPE_FF, "pfs");
+
+	startdir(pfs_ff, &pfs_dir);
+
+	// timestamp 0 for pfs.ff
+	pfs0 = diradd(&pfs_dir, FTYPE_DIR, "pfs");
+	finishfile(pfs0, 0, 0);
+
+	finishdir(&pfs_dir);
+// PROJECT: end
+
 	finishdir(&root);
 
 	finishdisk();
+	printf("DEBUG (PROJECT): fsformat.c was ran\n");
 	return 0;
 }
 

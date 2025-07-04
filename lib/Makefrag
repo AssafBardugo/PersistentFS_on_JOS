@@ -8,7 +8,7 @@ LIB_SRCFILES :=		lib/console.c \
 			lib/printfmt.c \
 			lib/readline.c \
 			lib/string.c \
-			lib/syscall.c
+			lib/syscall.c \
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/pgfault.c \
@@ -22,7 +22,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/file.c \
 			lib/fprintf.c \
 			lib/pageref.c \
-			lib/spawn.c
+			lib/spawn.c \
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/pipe.c \

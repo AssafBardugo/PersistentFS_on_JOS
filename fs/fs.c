@@ -123,10 +123,14 @@ fs_init(void)
 	super = diskaddr(1);
 	check_super();
 
+	// Read last timestamp from disk and set track_ts as default to last_ts.
+	last_ts = super->last_ts;	// PROJECT
+	track_ts = last_ts;
+	cprintf("PROJECT: The last timestamp is %d\n", last_ts);		
+
 	// Set "bitmap" to the beginning of the first bitmap block.
 	bitmap = diskaddr(2);
 	check_bitmap();
-	
 }
 
 // Find the disk block number slot for the 'filebno'th block in file 'f'.
@@ -238,6 +242,39 @@ dir_lookup(struct File *dir, const char *name, struct File **file)
 	return -E_NOT_FOUND;
 }
 
+// PROJECT: New function.
+// Return the file/dir from fatfile according to current track_ts
+static struct File*
+ff_lookup(struct File* ff)	// PROJECT
+{
+	int r;
+	uint32_t i, j, nblock;
+	char* blk;
+	struct File* f;
+
+	// ls_all is defined in inc/fs.h
+	// and get true (temporarily, for ls only) 
+	// in user/ls.c when the user provides -a
+	if(ff->f_type != FTYPE_FF || ls_all)
+		return ff;
+
+	nblock = ff->f_size / BLKSIZE;
+
+	for(i = 0; i < nblock; ++i){
+
+		if((r = file_get_block(ff, i, &blk)) < 0)
+			panic("ff_lookup: file_get_block return %d for file %s\n", r, ff->f_name);
+
+		f = (struct File*)blk;
+
+		for(j = 0; j < BLKFILES; ++j)
+
+			if(f[j].f_timestamp == track_ts)
+				return &f[j];
+	}
+	return 0;
+}
+
 // Set *file to point at a free File structure in dir.  The caller is
 // responsible for filling in the File fields.
 static int
@@ -312,7 +349,10 @@ walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem
 		name[path - p] = '\0';
 		path = skip_slash(path);
 
-		if (dir->f_type != FTYPE_DIR)
+		if((dir = ff_lookup(dir)) == 0)	// PROJECT
+			panic("PROJECT: walk_path: ff_lookup return NULL for dir.f_name=%s while track_ts=%d\n", dir->f_name, track_ts);
+
+		if (dir->f_type == FTYPE_REG)	// PROJECT: ff is treated as a dir
 			return -E_NOT_FOUND;
 
 		if ((r = dir_lookup(dir, name, &f)) < 0) {
@@ -329,7 +369,10 @@ walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem
 
 	if (pdir)
 		*pdir = dir;
-	*pf = f;
+	
+	if((*pf = ff_lookup(f)) == 0)	// PROJECT
+		panic("PROJECT: walk_path: ff_lookup return NULL for f.f_name=%s while track_ts=%d\n", f->f_name, track_ts);
+
 	return 0;
 }
 

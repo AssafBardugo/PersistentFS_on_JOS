@@ -1,8 +1,11 @@
 #include <inc/lib.h>
 
+// SHELL-PATH variable
+// Accessible by all shell commands
+char* PATH = (char*)PATH_VA;	// PROJECT
+
 #define BUFSIZ 1024		/* Find the buffer overrun bug! */
 int debug = 0;
-
 
 // gettoken(s, 0) prepares gettoken for subsequent calls and returns 0.
 // gettoken(0, token) parses a shell token from the previously set string,
@@ -112,7 +115,6 @@ again:
 				close(p[0]);
 				goto runit;
 			}
-			panic("| not implemented");
 			break;
 
 		case 0:		// String is complete
@@ -302,8 +304,18 @@ umain(int argc, char **argv)
 	if (interactive == '?')
 		interactive = iscons(0);
 
+	// Alloc a page that will be shared with every shell child
+	// This page will keep the current PATH and will update by cd command
+	if((r = sys_page_alloc(thisenv->env_id, PATH_VA, PTE_U | PTE_P | PTE_W | PTE_SHARE)) < 0) // PROJECT
+		panic("init_PATH: sys_page_alloc return %e\n", r);
+
+	strcpy(PATH, "/");	// PROJECT
+
 	while (1) {
 		char *buf;
+
+		if(interactive)	// PROJECT
+			cprintf("jos-shell %s ", PATH);
 
 		buf = readline(interactive ? "$ " : NULL);
 		if (buf == NULL) {

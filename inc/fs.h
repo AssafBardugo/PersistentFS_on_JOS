@@ -26,10 +26,28 @@
 
 #define MAXFILESIZE	((NDIRECT + NINDIRECT) * BLKSIZE)
 
+typedef uint32_t ts_t;	// PROJECT
+
+// Global last timestamp
+ts_t last_ts;	// PROJECT 
+
+// Global timestamp for opening fat files. 
+// The user can change it via the sys_set_track_ts system call to open a file at a specific time in the past. 
+// Its default value is last_ts.
+ts_t track_ts;	// PROJECT
+
+// Flag -a of command ls
+// It's global because functions in fs/fs.c use it to know how to treat ff files
+bool ls_all;	// PROJECT
+
+// PROJECT:
+// When File.f_type is FTYPE_FN it's mean all the blocks of the File 
+// containing versions of the file. Each for every timestamp.
 struct File {
 	char f_name[MAXNAMELEN];	// filename
 	off_t f_size;			// file size in bytes
 	uint32_t f_type;		// file type
+	ts_t f_timestamp;		// PROJECT: last timestamp of the file
 
 	// Block pointers.
 	// A block is allocated iff its value is != 0.
@@ -38,15 +56,17 @@ struct File {
 
 	// Pad out to 256 bytes; must do arithmetic in case we're compiling
 	// fsformat on a 64-bit machine.
-	uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 4];
+	uint8_t f_pad[256 - MAXNAMELEN - 12 - 4*NDIRECT - 4];	// PROJECT: Changed from -8 to -12
 } __attribute__((packed));	// required only on some 64-bit machines
 
 // An inode block contains exactly BLKFILES 'struct File's
 #define BLKFILES	(BLKSIZE / sizeof(struct File))
 
+
 // File types
 #define FTYPE_REG	0	// Regular file
 #define FTYPE_DIR	1	// Directory
+#define FTYPE_FF	2	// Fat File 	// PROJECT
 
 
 // File system super-block (both in-memory and on-disk)
@@ -56,6 +76,7 @@ struct File {
 struct Super {
 	uint32_t s_magic;		// Magic number: FS_MAGIC
 	uint32_t s_nblocks;		// Total number of blocks on disk
+	ts_t last_ts;			// PROJECT: save global timestamp on-disk!
 	struct File s_root;		// Root directory node
 };
 
@@ -106,7 +127,7 @@ union Fsipc {
 	struct Fsret_stat {
 		char ret_name[MAXNAMELEN];
 		off_t ret_size;
-		int ret_isdir;
+		int ret_ftype;	// PROJECT
 	} statRet;
 
 	struct Fsreq_flush {

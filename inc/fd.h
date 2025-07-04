@@ -40,7 +40,8 @@ struct Fd {
 struct Stat {
 	char st_name[MAXNAMELEN];
 	off_t st_size;
-	int st_isdir;
+	//int st_isdir;		// PROJECT: replaced with st_type
+	uint32_t st_ftype;	// PROJECT: same type as in struct File
 	struct Dev *st_dev;
 };
 

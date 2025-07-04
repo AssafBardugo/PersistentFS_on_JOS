@@ -304,7 +304,7 @@ fstat(int fdnum, struct Stat *stat)
 		return -E_NOT_SUPP;
 	stat->st_name[0] = 0;
 	stat->st_size = 0;
-	stat->st_isdir = 0;
+	stat->st_ftype = 0;	// PROJECT
 	stat->st_dev = dev;
 	return (*dev->dev_stat)(fd, stat);
 }

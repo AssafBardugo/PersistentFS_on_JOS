@@ -163,7 +163,7 @@ devfile_stat(struct Fd *fd, struct Stat *st)
 		return r;
 	strcpy(st->st_name, fsipcbuf.statRet.ret_name);
 	st->st_size = fsipcbuf.statRet.ret_size;
-	st->st_isdir = fsipcbuf.statRet.ret_isdir;
+	st->st_ftype = fsipcbuf.statRet.ret_ftype;	// PROJECT
 	return 0;
 }
 
