@@ -82,12 +82,13 @@ cd(char* arg_path)
 {
 	struct Stat st;
 	char new_path[MAXPATHLEN];
+	int r;
 
 	// in case PATH will corrupt
 	char PATH_BACKUP[MAXPATHLEN];
 	strcpy(PATH_BACKUP, PATH);
 
-	if(chdir(arg_path) == -E_BAD_PATH || stat(PATH, &st) < 0 || st.st_ftype != FTYPE_DIR){
+	if((r = chdir(arg_path)) == -E_BAD_PATH || (r = stat(PATH, &st)) < 0 || !(st.st_ftype & FTYPE_DIR)){
 
 		strcpy(PATH_BACKUP, PATH);
 		cprintf("cd: %s: No such file or directory\n", arg_path);

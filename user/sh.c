@@ -26,6 +26,7 @@ runcmd(char* s)
 {
 	char *argv[MAXARGS], *t, argv0buf[BUFSIZ];
 	int argc, c, i, r, p[2], fd, pipe_child;
+	char path[MAXPATHLEN];	// PROJECT
 
 	pipe_child = 0;
 	gettoken(s, 0);
@@ -63,24 +64,54 @@ again:
 				cprintf("open %s for read: %e", t, fd);
 				exit();
 			}
-
 			if(fd != 0){
-
 				dup(fd, 0);
 				close(fd);
 			}
-
 			break;
 
 		case '>':	// Output redirection
 			// Grab the filename from the argument list
-			if (gettoken(0, &t) != 'w') {
-				cprintf("syntax error: > not followed by word\n");
-				exit();
+			if((c = gettoken(0, &t)) == '>'){	// PROJECT
+				// redirection eith append
+				if(gettoken(0, &t) != 'w'){
+					cprintf("PROJECT: syntax error: >> not followed by word\n");
+					exit();
+				}
+				if(t[0] == '/')
+					// user pass absolute path
+					strcpy(path, t);
+				else{
+					// user pass relative path
+					strcpy(path, PATH);
+					if(strlen(path) > 1)
+						strcat(path, "/");
+					strcat(path, t);
+				}
+				if((fd = open(path, O_WRONLY | O_APPEND)) < 0){
+					cprintf("PROJECT: open %s for write: %e", path, fd);
+					exit();
+				}
 			}
-			if ((fd = open(t, O_WRONLY|O_CREAT|O_TRUNC)) < 0) {
-				cprintf("open %s for write: %e", t, fd);
-				exit();
+			else{ 
+				if (c != 'w') {
+					cprintf("syntax error: > not followed by word\n");
+					exit();
+				}
+				if(t[0] == '/')		// PROJECT
+					// user pass absolute path
+					strcpy(path, t);
+				else{
+					// user pass relative path
+					strcpy(path, PATH);
+					if(strlen(path) > 1)
+						strcat(path, "/");
+					strcat(path, t);
+				}
+				if ((fd = open(path, O_WRONLY | O_TRUNC)) < 0) {
+					cprintf("open %s for write: %e", path, fd);
+					exit();
+				}
 			}
 			if (fd != 1) {
 				dup(fd, 1);
@@ -158,7 +189,6 @@ runit:
 	// Spawn the command!
 	if ((r = spawn(argv[0], (const char**) argv)) < 0)
 		cprintf("spawn %s: %e\n", argv[0], r);
-
 	// In the parent, close all file descriptors and wait for the
 	// spawned command to exit.
 	close_all();
@@ -309,6 +339,7 @@ umain(int argc, char **argv)
 	if((r = sys_page_alloc(thisenv->env_id, PATH_VA, PTE_U | PTE_P | PTE_W | PTE_SHARE)) < 0) // PROJECT
 		panic("init_PATH: sys_page_alloc return %e\n", r);
 
+	// init PATH to root
 	strcpy(PATH, "/");	// PROJECT
 
 	while (1) {

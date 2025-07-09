@@ -28,18 +28,6 @@
 
 typedef uint32_t ts_t;	// PROJECT
 
-// Global last timestamp
-ts_t last_ts;	// PROJECT 
-
-// Global timestamp for opening fat files. 
-// The user can change it via the sys_set_track_ts system call to open a file at a specific time in the past. 
-// Its default value is last_ts.
-ts_t track_ts;	// PROJECT
-
-// Flag -a of command ls
-// It's global because functions in fs/fs.c use it to know how to treat ff files
-bool ls_all;	// PROJECT
-
 // PROJECT:
 // When File.f_type is FTYPE_FN it's mean all the blocks of the File 
 // containing versions of the file. Each for every timestamp.
@@ -64,9 +52,9 @@ struct File {
 
 
 // File types
-#define FTYPE_REG	0	// Regular file
-#define FTYPE_DIR	1	// Directory
-#define FTYPE_FF	2	// Fat File 	// PROJECT
+#define FTYPE_REG	0x00		// Regular file
+#define FTYPE_DIR	0x01		// Directory
+#define FTYPE_FF	0x10		// Fat File 	// PROJECT
 
 
 // File system super-block (both in-memory and on-disk)
@@ -97,6 +85,7 @@ enum {
 union Fsipc {
 	struct Fsreq_open {
 		char req_path[MAXPATHLEN];
+		ts_t req_ts;	// PROJECT
 		int req_omode;
 	} open;
 
@@ -128,6 +117,7 @@ union Fsipc {
 		char ret_name[MAXNAMELEN];
 		off_t ret_size;
 		int ret_ftype;	// PROJECT
+		int ret_ts;	// PROJECT
 	} statRet;
 
 	struct Fsreq_flush {

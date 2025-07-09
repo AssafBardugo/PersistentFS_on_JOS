@@ -1,14 +1,15 @@
 #include <inc/lib.h>
 
-char buf[8192];
+char* PATH = (char*)PATH_VA;
+char buf[2048];
 
 void
-cat(int f, char *s)
+cat(int fd, char *s)
 {
 	long n;
 	int r;
 
-	while ((n = read(f, buf, (long)sizeof(buf))) > 0)
+	while ((n = read(fd, buf, (long)sizeof(buf))) > 0)
 		if ((r = write(1, buf, n)) != n)
 			panic("write error copying %s: %e", s, r);
 	if (n < 0)
@@ -18,19 +19,32 @@ cat(int f, char *s)
 void
 umain(int argc, char **argv)
 {
-	int f, i;
+	int fd, i;
+	char path[MAXPATHLEN];
 
 	binaryname = "cat";
-	if (argc == 1)
+
+	if (argc == 1){
 		cat(0, "<stdin>");
-	else
-		for (i = 1; i < argc; i++) {
-			f = open(argv[i], O_RDONLY);
-			if (f < 0)
-				printf("can't open %s: %e\n", argv[i], f);
-			else {
-				cat(f, argv[i]);
-				close(f);
-			}
+		return;
+	}
+
+	for (i = 1; i < argc; i++) {
+
+		if(argv[i][0] == '/')
+			strcpy(path, argv[i]);
+		else{
+			strcpy(path, PATH);
+			if(strlen(path) > 1)
+				strcat(path, "/");
+			strcat(path, argv[i]);
 		}
+
+		if((fd = open(path, O_RDONLY)) < 0){
+			printf("can't open %s: %e\n", path, fd);
+			return;			
+		}
+		cat(fd, path);
+		close(fd);
+	}
 }

@@ -9,6 +9,7 @@ void
 fs_test(void)
 {
 	struct File *f;
+	struct File *ff;	// PROJECT
 	int r;
 	char *blk;
 	uint32_t *bits;
@@ -27,11 +28,11 @@ fs_test(void)
 	assert(!(bitmap[r/32] & (1 << (r%32))));
 	cprintf("alloc_block is good\n");
 
-	if ((r = file_open("/not-found", &f)) < 0 && r != -E_NOT_FOUND)
+	if ((r = file_open("/not-found", &f, &ff)) < 0 && r != -E_NOT_FOUND)
 		panic("file_open /not-found: %e", r);
 	else if (r == 0)
 		panic("file_open /not-found succeeded!");
-	if ((r = file_open("/newmotd", &f)) < 0)
+	if ((r = file_open("/newmotd", &f, &ff)) < 0)
 		panic("file_open /newmotd: %e", r);
 	cprintf("file_open is good\n");
 

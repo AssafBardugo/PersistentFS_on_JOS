@@ -247,7 +247,7 @@ main(int argc, char **argv)
 		writefile(&root, argv[i]);
 
 // PROJECT: start
-	pfs_ff = diradd(&root, FTYPE_FF, "pfs");
+	pfs_ff = diradd(&root, FTYPE_FF | FTYPE_DIR, "pfs");
 
 	startdir(pfs_ff, &pfs_dir);
 

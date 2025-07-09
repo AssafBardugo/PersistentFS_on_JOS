@@ -123,10 +123,9 @@ fs_init(void)
 	super = diskaddr(1);
 	check_super();
 
-	// Read last timestamp from disk and set track_ts as default to last_ts.
-	last_ts = super->last_ts;	// PROJECT
-	track_ts = last_ts;
-	cprintf("PROJECT: The last timestamp is %d\n", last_ts);		
+	// Read last timestamp from disk and set track_ts as default to super->last_ts.
+	super->last_ts = super->last_ts;	// PROJECT
+	cprintf("PROJECT: The last timestamp is %d\n", super->last_ts);		
 
 	// Set "bitmap" to the beginning of the first bitmap block.
 	bitmap = diskaddr(2);
@@ -243,36 +242,43 @@ dir_lookup(struct File *dir, const char *name, struct File **file)
 }
 
 // PROJECT: New function.
-// Return the file/dir from fatfile according to current track_ts
+// Return the file/dir from fatfile according to requested ts
 static struct File*
 ff_lookup(struct File* ff)	// PROJECT
 {
 	int r;
 	uint32_t i, j, nblock;
 	char* blk;
-	struct File* f;
+	struct File *f, *ret_f;
 
-	// ls_all is defined in inc/fs.h
-	// and get true (temporarily, for ls only) 
-	// in user/ls.c when the user provides -a
-	if(ff->f_type != FTYPE_FF || ls_all)
+	if((ff->f_type & FTYPE_FF) == 0)
 		return ff;
 
+	ret_f = 0;
+
+	// We maintain the invariant that the size of a fatfile
+	// is always a multiple of the file system's block size (like a directory-file).
+	assert((ff->f_size % BLKSIZE) == 0);
 	nblock = ff->f_size / BLKSIZE;
 
+	// TODO: Performance can be improved by replacing this loop with a binary search.
 	for(i = 0; i < nblock; ++i){
 
 		if((r = file_get_block(ff, i, &blk)) < 0)
-			panic("ff_lookup: file_get_block return %d for file %s\n", r, ff->f_name);
+			panic("ff_lookup: file_get_block return %d for file %s with walk_ts %d\n", r, ff->f_name, walk_ts);
 
 		f = (struct File*)blk;
 
-		for(j = 0; j < BLKFILES; ++j)
+		for(j = 0; j < BLKFILES; ++j){
 
-			if(f[j].f_timestamp == track_ts)
-				return &f[j];
+			if(f[j].f_name[0] == '\0')
+				continue;
+
+			if(f[j].f_timestamp <= walk_ts)
+				ret_f = &f[j];
+		}
 	}
-	return 0;
+	return ret_f;
 }
 
 // Set *file to point at a free File structure in dir.  The caller is
@@ -314,6 +320,63 @@ skip_slash(const char *p)
 	return p;
 }
 
+// copy blocks numbers form fromfile to a new file (dir/reg).
+// if fromfile is reg, last block will deep copy to support appending to it without page fault.
+struct File* 
+file_shalldup(struct File *ff, struct File *fromfile)	// PROJECT
+{
+	int r;
+	uint32_t i, last_bn;
+	struct File *f, *newfile;
+	void *buf;
+	size_t count;
+	off_t offset;
+
+	if((r = dir_alloc_file(ff, &newfile)) < 0)
+		panic("PROJECT: file_shalldup: dir_alloc_file return %e\n", r);
+
+	strcpy(newfile->f_name, fromfile->f_name);
+	newfile->f_type = fromfile->f_type;
+	newfile->f_timestamp = super->last_ts;
+
+	if(fromfile->f_type & FTYPE_DIR)
+		last_bn = (fromfile->f_size + BLKSIZE - 1) / BLKSIZE;
+	else
+		last_bn = fromfile->f_size / BLKSIZE;
+
+	for(i = 0; i < MIN(NDIRECT, last_bn); ++i)
+		newfile->f_direct[i] = fromfile->f_direct[i];	
+
+	if(last_bn >= NDIRECT){
+
+		if((newfile->f_indirect = alloc_block()) < 0);
+			panic("PROJECT: file_shalldup: we are out of blocks\n");
+
+		memmove(diskaddr(newfile->f_indirect), diskaddr(fromfile->f_indirect), BLKSIZE);
+	}
+
+	if(fromfile->f_type & FTYPE_DIR || fromfile->f_size == last_bn * BLKSIZE){
+		newfile->f_size = fromfile->f_size;
+		return newfile;
+	}
+
+	newfile->f_size = last_bn * BLKSIZE;	// Only whole blocks
+
+	// deep copy for last block
+	if(last_bn < NDIRECT)
+		buf = diskaddr(fromfile->f_direct[last_bn]);
+	else
+		buf = diskaddr(((uint32_t*)diskaddr(fromfile->f_indirect))[last_bn - NDIRECT]);
+	count = fromfile->f_size % BLKSIZE;
+	offset = last_bn * BLKSIZE;
+
+	if((r = file_write(newfile, buf, count, offset)) != count)
+		panic("PROJECT: file_shalldup: file_write wrote only %d bytes\n", r);
+
+	assert(newfile->f_size == fromfile->f_size);
+	return newfile;
+}
+
 // Evaluate a path name, starting at the root.
 // On success, set *pf to the file we found
 // and set *pdir to the directory the file is in.
@@ -321,15 +384,13 @@ skip_slash(const char *p)
 // it should be in, set *pdir and copy the final path
 // element into lastelem.
 static int
-walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem)
+walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem, struct File** ff)
 {
 	const char *p;
 	char name[MAXNAMELEN];
 	struct File *dir, *f;
 	int r;
 
-	// if (*path != '/')
-	//	return -E_BAD_PATH;
 	path = skip_slash(path);
 	f = &super->s_root;
 	dir = 0;
@@ -337,6 +398,8 @@ walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem
 
 	if (pdir)
 		*pdir = 0;
+
+	*ff = 0;	// PROJECT
 	*pf = 0;
 	while (*path != '\0') {
 		dir = f;
@@ -349,10 +412,24 @@ walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem
 		name[path - p] = '\0';
 		path = skip_slash(path);
 
-		if((dir = ff_lookup(dir)) == 0)	// PROJECT
-			panic("PROJECT: walk_path: ff_lookup return NULL for dir.f_name=%s while track_ts=%d\n", dir->f_name, track_ts);
+		if(dir->f_type & FTYPE_FF){	// PROJECT
 
-		if (dir->f_type == FTYPE_REG)	// PROJECT: ff is treated as a dir
+			*ff = dir;
+
+			if(walk_mode == WALK_CREATE && dir->f_timestamp < walk_ts){
+
+				if((dir = ff_lookup(dir)) == 0)
+					panic("PROJECT: walk_path: ff_lookup return NULL for dir.f_name=%s while walk_ts=%d\n", (*ff)->f_name, walk_ts);
+
+				dir = file_shalldup(*ff, dir);
+				(*ff)->f_timestamp = walk_ts;
+			}
+			else if((dir = ff_lookup(dir)) == 0)
+				panic("PROJECT: walk_path: ff_lookup return NULL for dir.f_name=%s while walk_ts=%d\n", (*ff)->f_name, walk_ts);
+		}
+
+		// NOTE: after ff_lookup, dir cann't be a ff
+		if (dir->f_type != FTYPE_DIR)
 			return -E_NOT_FOUND;
 
 		if ((r = dir_lookup(dir, name, &f)) < 0) {
@@ -365,13 +442,21 @@ walk_path(const char *path, struct File **pdir, struct File **pf, char *lastelem
 			}
 			return r;
 		}
+		// if dir_lookup find name, we continue
 	}
 
 	if (pdir)
 		*pdir = dir;
-	
-	if((*pf = ff_lookup(f)) == 0)	// PROJECT
-		panic("PROJECT: walk_path: ff_lookup return NULL for f.f_name=%s while track_ts=%d\n", f->f_name, track_ts);
+
+	if(f->f_type & FTYPE_FF){	// PROJECT
+
+		*ff = f;
+
+		if((*pf = ff_lookup(f)) == 0)
+			panic("PROJECT: walk_path: ff_lookup return NULL for f.f_name=%s while walk_ts=%d\n", f->f_name, walk_ts);
+	}
+	else
+		*pf = f;
 
 	return 0;
 }
@@ -388,15 +473,36 @@ file_create(const char *path, struct File **pf)
 	char name[MAXNAMELEN];
 	int r;
 	struct File *dir, *f;
+	struct File *ff;	// PROJECT
 
-	if ((r = walk_path(path, &dir, &f, name)) == 0)
+	walk_ts = ++super->last_ts;	// PROJECT
+
+	if ((r = walk_path(path, &dir, &f, name, &ff)) == 0)
 		return -E_FILE_EXISTS;
+
 	if (r != -E_NOT_FOUND || dir == 0)
 		return r;
 	if ((r = dir_alloc_file(dir, &f)) < 0)
 		return r;
 
 	strcpy(f->f_name, name);
+
+	if(ff != 0){	// PROJECT
+
+		assert(dir->f_timestamp == walk_ts);
+	
+		f->f_type = FTYPE_FF | FTYPE_REG;	// new fatfile dir should be in mkdir
+		f->f_timestamp = walk_ts;
+		file_flush(dir);
+
+		// create first timestamp for f
+		dir = f;
+		if((r = dir_alloc_file(dir, &f)) < 0)
+			panic("PROJECT: create_ts: dir_alloc_file return %e\n", r);
+		strcpy(f->f_name, name);
+		f->f_type = FTYPE_REG;
+		f->f_timestamp = walk_ts;
+	}
 	*pf = f;
 	file_flush(dir);
 	return 0;
@@ -405,9 +511,9 @@ file_create(const char *path, struct File **pf)
 // Open "path".  On success set *pf to point at the file and return 0.
 // On error return < 0.
 int
-file_open(const char *path, struct File **pf)
+file_open(const char *path, struct File **pf, struct File** ff)
 {
-	return walk_path(path, 0, pf, 0);
+	return walk_path(path, 0, pf, 0, ff);
 }
 
 // Read count bytes from f into buf, starting from seek position

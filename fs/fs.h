@@ -11,6 +11,13 @@
 /* Maximum disk size we can handle (3GB) */
 #define DISKSIZE	0xC0000000
 
+/* walk_path modes */
+#define	WALK_RDONLY	0x0	// read only. don't create new timestamp
+#define	WALK_CREATE	0x1	// create new timestamp
+
+int walk_mode;	// PROJECT
+ts_t walk_ts;	// PROJECT
+
 struct Super *super;		// superblock
 uint32_t *bitmap;		// bitmap blocks mapped in memory
 
@@ -30,16 +37,17 @@ void	bc_init(void);
 void 	garbage_collector(void); // Challenge
 
 /* fs.c */
-void	fs_init(void);
-int	file_get_block(struct File *f, uint32_t file_blockno, char **pblk);
-int	file_create(const char *path, struct File **f);
-int	file_open(const char *path, struct File **f);
-ssize_t	file_read(struct File *f, void *buf, size_t count, off_t offset);
-int	file_write(struct File *f, const void *buf, size_t count, off_t offset);
-int	file_set_size(struct File *f, off_t newsize);
-void	file_flush(struct File *f);
-int	file_remove(const char *path);
-void	fs_sync(void);
+void		fs_init(void);
+int		file_get_block(struct File *f, uint32_t file_blockno, char **pblk);
+int		file_create(const char *path, struct File **f);
+int		file_open(const char *path, struct File **f, struct File** ff);
+ssize_t		file_read(struct File *f, void *buf, size_t count, off_t offset);
+int		file_write(struct File *f, const void *buf, size_t count, off_t offset);
+int		file_set_size(struct File *f, off_t newsize);
+void		file_flush(struct File *f);
+int		file_remove(const char *path);
+void		fs_sync(void);
+struct File*   	file_shalldup(struct File *ff, struct File *fromfile);   // PROJECT
 
 /* int	map_block(uint32_t); */
 bool	block_is_free(uint32_t blockno);

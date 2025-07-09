@@ -42,6 +42,7 @@ struct Stat {
 	off_t st_size;
 	//int st_isdir;		// PROJECT: replaced with st_type
 	uint32_t st_ftype;	// PROJECT: same type as in struct File
+	ts_t st_ts;		// PROJECT: timestamp
 	struct Dev *st_dev;
 };
 

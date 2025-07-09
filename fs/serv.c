@@ -32,6 +32,7 @@
 struct OpenFile {
 	uint32_t o_fileid;	// file id
 	struct File *o_file;	// mapped descriptor for open file
+	struct File *o_fatfile;	// PROJECT: the fatfile that contain the file. NULL if there is no such one.
 	int o_mode;		// open mode
 	struct Fd *o_fd;	// Fd page
 };
@@ -42,7 +43,7 @@ struct OpenFile {
 
 // initialize to force into data section
 struct OpenFile opentab[MAXOPEN] = {
-	{ 0, 0, 1, 0 }
+	{ 0, 0, 0, 1, 0 }  // PROJECT: init o_fatfile to 0
 };
 
 // Virtual address at which to receive page mappings containing client requests.
@@ -108,6 +109,17 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 	int fileid;
 	int r;
 	struct OpenFile *o;
+	struct File *ff;	// PROJECT
+
+	if(req->req_ts == TS_UNSPECIFIED)	// PROJECT
+		walk_ts = super->last_ts;
+	else
+		walk_ts = req->req_ts;
+
+	if((req->req_omode & O_CREAT) || (req->req_omode & O_WRONLY))	// PROJECT
+		walk_mode = WALK_CREATE;
+	else
+		walk_mode = WALK_RDONLY;
 
 	if (debug)
 		cprintf("serve_open %08x %s 0x%x\n", envid, req->req_path, req->req_omode);
@@ -125,7 +137,7 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 	fileid = r;
 
 	// Open the file
-	if (req->req_omode & O_CREAT) {
+	if(walk_mode == WALK_CREATE){	// PROJECT
 		if ((r = file_create(path, &f)) < 0) {
 			if (!(req->req_omode & O_EXCL) && r == -E_FILE_EXISTS)
 				goto try_open;
@@ -135,7 +147,7 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 		}
 	} else {
 try_open:
-		if ((r = file_open(path, &f)) < 0) {
+		if ((r = file_open(path, &f, &ff)) < 0) {
 			if (debug)
 				cprintf("file_open failed: %e", r);
 			return r;
@@ -150,7 +162,8 @@ try_open:
 			return r;
 		}
 	}
-	if ((r = file_open(path, &f)) < 0) {
+	
+	if ((r = file_open(path, &f, &ff)) < 0) {
 		if (debug)
 			cprintf("file_open failed: %e", r);
 		return r;
@@ -158,12 +171,15 @@ try_open:
 
 	// Save the file pointer
 	o->o_file = f;
+	o->o_fatfile = ff;	// PROJECT
 
 	// Fill out the Fd structure
 	o->o_fd->fd_file.id = o->o_fileid;
 	o->o_fd->fd_omode = req->req_omode & O_ACCMODE;
 	o->o_fd->fd_dev_id = devfile.dev_id;
 	o->o_mode = req->req_omode;
+	if(req->req_omode & O_APPEND)	// PROJECT
+		o->o_fd->fd_offset = o->o_file->f_size;
 
 	if (debug)
 		cprintf("sending success, page %08x\n", (uintptr_t) o->o_fd);
@@ -244,10 +260,18 @@ serve_write(envid_t envid, struct Fsreq_write *req)
 	// LAB 5: Your code here.
 	struct OpenFile* o;
 	size_t count;
-	int r;
+	int r, i;
 
 	if((r = openfile_lookup(envid, req->req_fileid, &o)) < 0)
 		return r;
+
+	if(o->o_fatfile != 0){	// PROJECT
+
+		o->o_file = file_shalldup(o->o_fatfile, o->o_file);
+		o->o_fatfile->f_timestamp = super->last_ts;
+
+		o->o_fd->fd_offset = o->o_file->f_size;
+	}
 
 	if((r = file_write(o->o_file, req->req_buf, req->req_n, o->o_fd->fd_offset)) < 0)
 		return r;
@@ -277,6 +301,7 @@ serve_stat(envid_t envid, union Fsipc *ipc)
 	strcpy(ret->ret_name, o->o_file->f_name);
 	ret->ret_size = o->o_file->f_size;
 	ret->ret_ftype = o->o_file->f_type;
+	ret->ret_ts = o->o_file->f_timestamp;	// PROJECT
 	return 0;
 }
 
@@ -314,7 +339,7 @@ fshandler handlers[] = {
 	[FSREQ_FLUSH] =		(fshandler)serve_flush,
 	[FSREQ_WRITE] =		(fshandler)serve_write,
 	[FSREQ_SET_SIZE] =	(fshandler)serve_set_size,
-	[FSREQ_SYNC] =		serve_sync
+	[FSREQ_SYNC] =		serve_sync // flush the entire file system.
 };
 #define NHANDLERS (sizeof(handlers)/sizeof(handlers[0]))
 

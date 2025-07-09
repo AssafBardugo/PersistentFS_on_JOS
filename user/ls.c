@@ -1,90 +1,48 @@
 #include <inc/lib.h>
 
 char* PATH = (char*)PATH_VA;
-
-bool ls_long;
-
-void ls_dir(const char* path);
-void ls_print(int type, off_t size, const char* name, int ts);
-void ls_print_long(int type, off_t size, const char* name, int ts);
-void ls_print_short(const char* name, int type);
+bool all_flag, long_flag;
 
 void
-ls(const char *path)
+ls_short(const char* path)
 {
-	int r, n;
-	struct Stat st;
+	int r, fd, n, ctr = 0;
 	struct File f;
+	struct Stat st;
+	char fname[MAXNAMELEN+1];
 
 	if((r = stat(path, &st)) < 0)
 		panic("stat %s: %e", path, r);
 
-	if(st.st_ftype == FTYPE_DIR)
-		ls_dir(path);
-	else
-		ls_print(st.st_ftype, st.st_size, st.st_name, -1);	// TODO: handle ts
-		
-	if(!ls_long)
-		cputchar('\n');
-}
-
-void
-ls_dir(const char *path)
-{
-	int fd, ff_fd, n, r;
-	struct File f;
-	struct Stat st;
-	char ff_name[MAXNAMELEN];
-	char ff_path[MAXPATHLEN];
+	if(st.st_ftype & FTYPE_REG){
+		printf("%s\n", st.st_name);
+		return;
+	}
 
 	if ((fd = open(path, O_RDONLY)) < 0)
 		panic("open %s: %e", path, fd);
-
-	if(ls_all){
-		ls_print(FTYPE_DIR, 0, ".", -1);	// TODO: handle ts
-		ls_print(FTYPE_DIR, 0, "..", -1);	// TODO: handle ts
-	}
 
 	while ((n = readn(fd, &f, sizeof f)) == sizeof f){
 
 		if(!f.f_name[0])
 			continue;
 		
-		if(f.f_type == FTYPE_FF){
-
-			if(ls_all)
-				ls_print(f.f_type, f.f_size, f.f_name, f.f_timestamp);
-
-			strcpy(ff_path, path);
-			if(ff_path[0] != '/')
-				strcat(ff_path, "/");
-			strcat(ff_path, f.f_name);
-
-			if((r = stat(ff_path, &st)) < 0)
-				panic("stat %s: %e", path, r);
-
-			if((ff_fd = open(ff_path, O_RDONLY)) < 0)
-				panic("open %s: %e", ff_path, ff_fd);
-
-			while((n = readn(ff_fd, &f, sizeof f)) == sizeof f){
-
-				if(!f.f_name[0])
-					continue;
-				
-				ls_print(f.f_type, f.f_size, f.f_name, f.f_timestamp);
-			}	
-			close(ff_fd);
-		
-			if (n > 0)
-				panic("short read in directory %s", path);
-		
-			if (n < 0)
-				panic("error reading directory %s: %e", path, n);
+		if(++ctr == 5){
+			cputchar('\n');
+			ctr = 1;
 		}
-		else
-			ls_print(f.f_type, f.f_size, f.f_name, f.f_timestamp);
+
+		strcpy(fname, f.f_name);
+
+		if(f.f_type & FTYPE_DIR)
+			strcat(fname, "/");
+			
+		printf("%-20s", fname);
 	}
 	close(fd);
+
+	if(ctr > 0)
+		cputchar('\n');
 
 	if (n > 0)
 		panic("short read in directory %s", path);
@@ -94,60 +52,106 @@ ls_dir(const char *path)
 }
 
 void
-ls_print_short(const char* name, int type)
+ls_long(const char* path)
 {
-	static int ctr;
+	int r, fd, n;
+	struct File f;
+	struct Stat st;
+	char fname[MAXNAMELEN+1];
+	char ffpath[MAXPATHLEN];
 
-	if(++ctr == 5){
-		cputchar('\n');
-		ctr = 1;
+	if((r = stat(path, &st)) < 0)
+		panic("stat %s: %e", path, r);
+
+	if(st.st_ftype & FTYPE_REG){
+
+		if(all_flag && st.st_ftype & FTYPE_FF)
+			printf("%-8s %-7dB   %-20s\n", "fatfile", st.st_size, st.st_name);
+
+		printf("%-8s %-7dB   %-20s\n", "file", st.st_size, st.st_name);
+
+		return;
 	}
 
-	if(type == FTYPE_DIR)
-		printf("%19s/", name);
-	else
-		printf("%20s", name);
-}
+	if ((fd = open(path, O_RDONLY)) < 0)
+		panic("open %s: %e", path, fd);
 
+	if(all_flag){
+		printf("%-6d  %-8s %-7dB   %-20s\n", st.st_ts, "dir", st.st_size, ".");
+		printf("%-6d  %-8s %-7dB   %-20s\n", 0, "dir", 0, "..");
+	}
+
+	while ((n = readn(fd, &f, sizeof f)) == sizeof f){
+
+		if(!f.f_name[0])
+			continue;
+
+		strcpy(fname, f.f_name);
+
+		if(f.f_type & FTYPE_DIR)
+			strcat(fname, "/");
+
+		if(f.f_type & FTYPE_FF){
+
+			if(all_flag)
+				printf("%-6d  %-8s %-7dB   %-20s\n", f.f_timestamp, "fatfile", f.f_size, f.f_name);
+
+			strcpy(ffpath, path);
+			strcat(ffpath, "/");
+			strcat(ffpath, f.f_name);
+			
+			if((r = stat(ffpath, &st)) < 0)
+				panic("stat %s: %e", ffpath, r);
+
+			printf("%-6d  %-8s %-7dB   %-20s\n", st.st_ts, (f.f_type & FTYPE_DIR) ? "dir" : "file", st.st_size, fname);
+		}
+		else
+			printf("%-6d  %-8s %-7dB   %-20s\n", st.st_ts, (f.f_type & FTYPE_DIR) ? "dir" : "file", f.f_size, fname);
+	}
+	close(fd);
+
+	if (n > 0)
+		panic("short read in directory %s", path);
+
+	if (n < 0)
+		panic("error reading directory %s: %e", path, n);
+}
+/*
 void
-ls_print(int type, off_t size, const char *name, int ts)
+ls_all_ts(const char* ffpath, char* ffname, char* fname)
 {
-	if(ls_long)
-		ls_print_long(type, size, name, ts);
-	else
-		ls_print_short(name, type);
+	int fd, n;
+	struct File f;
+	struct Stat st;
+	char path[MAXPATHLEN];
+
+	strcpy(path, ffpath);
+	strcat(path, "/");
+	strcat(path, ffname);
+
+	if ((fd = open(path, O_RDONLY)) < 0)
+		panic("open %s: %e", path, fd);
+
+	while ((n = readn(fd, &f, sizeof f)) == sizeof f){
+
+		if(!f.f_name[0])
+			continue;
+
+		printf("%-6d  %-8s %-7dB   %-20s\n", f.f_timestamp, (f.f_type & FTYPE_DIR) ? "dir" : "file", f.f_size, fname);
+	}
+	close(fd);
+
+	if (n > 0)
+		panic("short read in directory %s", path);
+
+	if (n < 0)
+		panic("error reading directory %s: %e", path, n);
 }
-
-void 
-ls_print_long(int type, off_t size, const char* name, int ts)
-{
-	char line[256] = {0};
-	int seek = 0;
-
-	if(ls_all)
-		seek = snprintf(line, sizeof(line), "%6d   ", (ts == -1) ? last_ts : ts);
-
-	if(type == FTYPE_DIR)
-		seek += snprintf(line + seek, sizeof(line) - seek, "dir     %7dB\t", size);
-
-	if(type == FTYPE_FF)
-		seek += snprintf(line + seek, sizeof(line) - seek, "fatfile %7dB\t", size);
-
-	if(type == FTYPE_REG)
-		seek += snprintf(line + seek, sizeof(line) - seek, "file    %7dB\t", size);
-
-	seek += snprintf(line + seek, sizeof(line) - seek, "%s", name);
-
-	if(type == FTYPE_DIR)
-		snprintf(line + seek, sizeof(line) - seek, "/");
-
-	printf("%s\n", line);
-}
-
+*/
 void
 usage(void)
 {
-	printf("usage: ls [-l] [-a] [file]\n");
+	printf("usage: ls [-l] [-a] [path]\n");
 	exit();
 }
 
@@ -163,10 +167,10 @@ umain(int argc, char **argv)
 	while ((i = argnext(&args)) >= 0){
 		switch (i) {
 		case 'l':
-			ls_long = true;
+			long_flag = true;
 			break;
 		case 'a':
-			ls_all = true;
+			all_flag = true;
 			break;
 		default:
 			usage();
@@ -187,7 +191,9 @@ umain(int argc, char **argv)
 		}
 	}
 
-	ls(ls_path);
-	ls_all = false; // ls_all used also by ff_lookup in fs/fs.c
+	if(long_flag || all_flag)
+		ls_long(ls_path);
+	else
+		ls_short(ls_path);
 }
 

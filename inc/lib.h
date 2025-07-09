@@ -29,6 +29,9 @@ void	umain(int argc, char **argv);
 // SHELL-PATH address
 #define PATH_VA		((void*) 0xB0000000)	// PROJECT
 
+#define TS_UNSPECIFIED	((ts_t)(-1))	// PROJECT
+
+
 // libmain.c or entry.S
 extern const char *binaryname;
 extern const volatile struct Env *thisenv;
@@ -99,6 +102,7 @@ int	open(const char *path, int mode);
 int	ftruncate(int fd, off_t size);
 int	remove(const char *path);
 int	sync(void);
+int	open_ts(const char *path, int mode, ts_t walk_ts);	// PROJECT
 
 // pageref.c
 int	pageref(void *addr);
@@ -130,5 +134,6 @@ void	wait(envid_t env);
 #define	O_TRUNC		0x0200		/* truncate to zero length */
 #define	O_EXCL		0x0400		/* error if already exists */
 #define O_MKDIR		0x0800		/* create directory, not regular file */
+#define O_APPEND	0x1000		/* set fd_offset to be the size */ 		// PROJECT
 
 #endif	// !JOS_INC_LIB_H
