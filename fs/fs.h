@@ -16,7 +16,7 @@
 #define	WALK_CREATE	0x1	// create new timestamp
 
 int walk_mode;	// PROJECT
-ts_t walk_ts;	// PROJECT
+ts_t track_ts;	// PROJECT
 
 struct Super *super;		// superblock
 uint32_t *bitmap;		// bitmap blocks mapped in memory

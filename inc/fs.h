@@ -26,7 +26,7 @@
 
 #define MAXFILESIZE	((NDIRECT + NINDIRECT) * BLKSIZE)
 
-typedef uint32_t ts_t;	// PROJECT
+typedef ssize_t ts_t;	// PROJECT
 
 // PROJECT:
 // When File.f_type is FTYPE_FN it's mean all the blocks of the File 
@@ -116,8 +116,9 @@ union Fsipc {
 	struct Fsret_stat {
 		char ret_name[MAXNAMELEN];
 		off_t ret_size;
-		int ret_ftype;	// PROJECT
-		int ret_ts;	// PROJECT
+		int ret_ftype;			// PROJECT
+		int ret_ts;			// PROJECT
+		uint32_t ret_blkn[NDIRECT];	// PROJECT
 	} statRet;
 
 	struct Fsreq_flush {

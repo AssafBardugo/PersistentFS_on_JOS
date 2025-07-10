@@ -40,9 +40,10 @@ struct Fd {
 struct Stat {
 	char st_name[MAXNAMELEN];
 	off_t st_size;
-	//int st_isdir;		// PROJECT: replaced with st_type
-	uint32_t st_ftype;	// PROJECT: same type as in struct File
-	ts_t st_ts;		// PROJECT: timestamp
+	//int st_isdir;			// PROJECT: replaced with st_type
+	uint32_t st_ftype;		// PROJECT: same type as in struct File
+	ts_t st_ts;			// PROJECT: timestamp
+	uint32_t st_blkn[NDIRECT];	// PROJECT: direct blocks numbers. for track cmd.
 	struct Dev *st_dev;
 };
 

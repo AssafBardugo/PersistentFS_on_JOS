@@ -90,7 +90,7 @@ cd(char* arg_path)
 
 	if((r = chdir(arg_path)) == -E_BAD_PATH || (r = stat(PATH, &st)) < 0 || !(st.st_ftype & FTYPE_DIR)){
 
-		strcpy(PATH_BACKUP, PATH);
+		strcpy(PATH, PATH_BACKUP);
 		cprintf("cd: %s: No such file or directory\n", arg_path);
 	}
 }

@@ -71,7 +71,7 @@ open(const char *path, int mode)
 }
 
 int
-open_ts(const char *path, int mode, ts_t walk_ts)	// PROJECT
+open_ts(const char *path, int mode, ts_t req_ts)	// PROJECT
 {
 	int r;
 	struct Fd *fd;
@@ -84,7 +84,7 @@ open_ts(const char *path, int mode, ts_t walk_ts)	// PROJECT
 
 	strcpy(fsipcbuf.open.req_path, path);
 	fsipcbuf.open.req_omode = mode;
-	fsipcbuf.open.req_ts = walk_ts;
+	fsipcbuf.open.req_ts = req_ts;
 
 	if ((r = fsipc(FSREQ_OPEN, fd)) < 0) {
 		fd_close(fd, 0);
@@ -161,7 +161,7 @@ devfile_write(struct Fd *fd, const void *buf, size_t n)
 static int
 devfile_stat(struct Fd *fd, struct Stat *st)
 {
-	int r;
+	int r, i;
 
 	fsipcbuf.stat.req_fileid = fd->fd_file.id;
 	if ((r = fsipc(FSREQ_STAT, NULL)) < 0)
@@ -170,6 +170,8 @@ devfile_stat(struct Fd *fd, struct Stat *st)
 	st->st_size = fsipcbuf.statRet.ret_size;
 	st->st_ftype = fsipcbuf.statRet.ret_ftype;	// PROJECT
 	st->st_ts = fsipcbuf.statRet.ret_ts;		// PROJECT
+	for(i = 0; i < NDIRECT; ++i)			// PROJECT
+		st->st_blkn[i] = fsipcbuf.statRet.ret_blkn[i];	
 	return 0;
 }
 

@@ -31,13 +31,17 @@ USERAPPS :=		$(USERAPPS) \
 			$(OBJDIR)/user/testshell \
 			$(OBJDIR)/user/hello \
 			$(OBJDIR)/user/cd \
-			$(OBJDIR)/user/touch	# PROJECT
+			$(OBJDIR)/user/touch \
+			$(OBJDIR)/user/track \
+			$(OBJDIR)/user/undo \
+			$(OBJDIR)/user/mkdir	# PROJECT
 
 FSIMGTXTFILES :=	$(FSIMGTXTFILES) \
 			fs/lorem \
 			fs/script \
 			fs/testshell.key \
-			fs/testshell.sh
+			fs/testshell.sh \
+			fs/random_block
 
 
 FSIMGFILES := $(FSIMGTXTFILES) $(USERAPPS)

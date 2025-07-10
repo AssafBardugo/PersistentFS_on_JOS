@@ -166,7 +166,6 @@ runit:
 			cprintf("EMPTY COMMAND\n");
 		return;
 	}
-
 	// Clean up command line.
 	// Read all commands from the filesystem: add an initial '/' to
 	// the command name.

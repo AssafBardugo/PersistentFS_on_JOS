@@ -116,38 +116,7 @@ ls_long(const char* path)
 	if (n < 0)
 		panic("error reading directory %s: %e", path, n);
 }
-/*
-void
-ls_all_ts(const char* ffpath, char* ffname, char* fname)
-{
-	int fd, n;
-	struct File f;
-	struct Stat st;
-	char path[MAXPATHLEN];
 
-	strcpy(path, ffpath);
-	strcat(path, "/");
-	strcat(path, ffname);
-
-	if ((fd = open(path, O_RDONLY)) < 0)
-		panic("open %s: %e", path, fd);
-
-	while ((n = readn(fd, &f, sizeof f)) == sizeof f){
-
-		if(!f.f_name[0])
-			continue;
-
-		printf("%-6d  %-8s %-7dB   %-20s\n", f.f_timestamp, (f.f_type & FTYPE_DIR) ? "dir" : "file", f.f_size, fname);
-	}
-	close(fd);
-
-	if (n > 0)
-		panic("short read in directory %s", path);
-
-	if (n < 0)
-		panic("error reading directory %s: %e", path, n);
-}
-*/
 void
 usage(void)
 {

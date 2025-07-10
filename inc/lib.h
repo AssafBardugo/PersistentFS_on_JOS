@@ -29,7 +29,7 @@ void	umain(int argc, char **argv);
 // SHELL-PATH address
 #define PATH_VA		((void*) 0xB0000000)	// PROJECT
 
-#define TS_UNSPECIFIED	((ts_t)(-1))	// PROJECT
+#define TS_UNSPECIFIED	MAX_SSIZE	// PROJECT
 
 
 // libmain.c or entry.S
@@ -96,13 +96,14 @@ ssize_t	readn(int fd, void *buf, size_t nbytes);
 int	dup(int oldfd, int newfd);
 int	fstat(int fd, struct Stat *statbuf);
 int	stat(const char *path, struct Stat *statbuf);
+int	stat_ts(const char *path, struct Stat *stat, ts_t req_ts);	// PROJECT
 
 // file.c
 int	open(const char *path, int mode);
 int	ftruncate(int fd, off_t size);
 int	remove(const char *path);
 int	sync(void);
-int	open_ts(const char *path, int mode, ts_t walk_ts);	// PROJECT
+int	open_ts(const char *path, int mode, ts_t req_ts);	// PROJECT
 
 // pageref.c
 int	pageref(void *addr);

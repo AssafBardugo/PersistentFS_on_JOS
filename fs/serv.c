@@ -112,9 +112,11 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 	struct File *ff;	// PROJECT
 
 	if(req->req_ts == TS_UNSPECIFIED)	// PROJECT
-		walk_ts = super->last_ts;
+		track_ts = super->last_ts;
+	else if(req->req_ts < 0)
+		track_ts = super->last_ts + req->req_ts;
 	else
-		walk_ts = req->req_ts;
+		track_ts = req->req_ts;
 
 	if((req->req_omode & O_CREAT) || (req->req_omode & O_WRONLY))	// PROJECT
 		walk_mode = WALK_CREATE;
@@ -126,7 +128,9 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 
 	// Copy in the path, making sure it's null-terminated
 	memmove(path, req->req_path, MAXPATHLEN);
-	path[MAXPATHLEN-1] = 0;
+	if(req->req_omode & O_MKDIR)	// PROJECT
+		path[MAXPATHLEN-1] = '/';
+	path[MAXPATHLEN-2] = 0;
 
 	// Find an open file ID
 	if ((r = openfile_alloc(&o)) < 0) {
@@ -290,7 +294,7 @@ serve_stat(envid_t envid, union Fsipc *ipc)
 	struct Fsreq_stat *req = &ipc->stat;
 	struct Fsret_stat *ret = &ipc->statRet;
 	struct OpenFile *o;
-	int r;
+	int r, i, num_blk;
 
 	if (debug)
 		cprintf("serve_stat %08x %08x\n", envid, req->req_fileid);
@@ -302,6 +306,10 @@ serve_stat(envid_t envid, union Fsipc *ipc)
 	ret->ret_size = o->o_file->f_size;
 	ret->ret_ftype = o->o_file->f_type;
 	ret->ret_ts = o->o_file->f_timestamp;	// PROJECT
+
+	num_blk = (o->o_file->f_size + BLKSIZE - 1) / BLKSIZE;	 // PROJECT
+        for(i = 0; i < MIN(num_blk, NDIRECT); ++i)     
+                ret->ret_blkn[i] = o->o_file->f_direct[i];
 	return 0;
 }
 

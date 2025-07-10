@@ -293,7 +293,7 @@ ftruncate(int fdnum, off_t newsize)
 int
 fstat(int fdnum, struct Stat *stat)
 {
-	int r;
+	int r, i;
 	struct Dev *dev;
 	struct Fd *fd;
 
@@ -304,21 +304,29 @@ fstat(int fdnum, struct Stat *stat)
 		return -E_NOT_SUPP;
 	stat->st_name[0] = 0;
 	stat->st_size = 0;
-	stat->st_ftype = 0;	// PROJECT
-	stat->st_ts = 0;	// PROJECT
+	stat->st_ftype = 0;		// PROJECT
+	stat->st_ts = 0;		// PROJECT
+	for(i = 0; i < NDIRECT; ++i)    // PROJECT
+        	stat->st_blkn[i] = 0;
 	stat->st_dev = dev;
 	return (*dev->dev_stat)(fd, stat);
 }
 
 int
-stat(const char *path, struct Stat *stat)
+stat_ts(const char *path, struct Stat *stat, ts_t req_ts)
 {
 	int fd, r;
 
-	if ((fd = open(path, O_RDONLY)) < 0)
+	if ((fd = open_ts(path, O_RDONLY, req_ts)) < 0)
 		return fd;
 	r = fstat(fd, stat);
 	close(fd);
 	return r;
+}
+
+int
+stat(const char *path, struct Stat *stat)	// PROJECT
+{
+	return stat_ts(path, stat, TS_UNSPECIFIED);
 }
 

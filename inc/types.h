@@ -39,6 +39,9 @@ typedef int32_t ssize_t;
 // off_t is used for file offsets and lengths.
 typedef int32_t off_t;
 
+// Equal to MAX_INT from limits.h
+#define MAX_SSIZE	0x7FFFFFFF	// PROJECT
+
 // Efficient min and max operations
 #define MIN(_a, _b)						\
 ({								\
