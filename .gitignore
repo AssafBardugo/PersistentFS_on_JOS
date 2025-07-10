@@ -11,8 +11,8 @@
 /qemu.out
 /qemu.log
 /gradelib.pyc
-/lab?-handin.tar.gz
 /lab?/
 /sol?/
 .suf
 cscope.*
+*grade*
