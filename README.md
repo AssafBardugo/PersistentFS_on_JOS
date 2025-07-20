@@ -1,81 +1,71 @@
-Assaf Bardugo
+# JOS Persistent File System (PFS)
+**Author:** Assaf Bardugo
 
-JOS Persistent File System (PFS)
+> A versioned, time-traveling file system layer for JOS.
 
-This project extends the JOS operating system’s File System (FS) with a Persistent File System (PFS) layer. 
-PFS preserves every historical version of a file by creating a hidden “fat file” directory for each file; every mutation spawns a new version tagged by an incrementing timestamp. 
-Users can navigate, inspect, and restore previous versions using the provided track command.
+This project extends the JOS operating system’s file system with a **Persistent File System (PFS)** layer.  
+Every mutation to a file creates a snapshot, stored in a hidden directory, allowing users to navigate and restore historical versions.
 
 ---
-Table of Contents
-1. Motivation
-2. Features
-4. Usage
-   Basic File Operations
-   track Command
-   Time-Travel via touch and >>
-5. Implementation Details
-   Superblock & Global Timestamp
-   Fat File Structure
-   Modifications to fs.c & fsformat.c
-   Shared Path for Shell Built-ins
-   New Syscalls
-6. File Layout
+
+## Table of Contents
+<details>
+<summary>Click to expand</summary>
+
+1. [Motivation](#motivation)  
+2. [Features](#features)  
+3. [Usage](#usage)  
+   - [Basic File Operations](#basic-file-operations)  
+   - [`track` Command](#track-command)  
+   - [Time-Travel via `touch` and `>>`](#time-travel-via-touch-and-)  
+4. [Implementation Details](#implementation-details)  
+   - [Superblock & Global Timestamp](#superblock--global-timestamp)  
+   - [Fat File Structure](#fat-file-structure)  
+   - [Modifications to `fs.c` & `fsformat.c`](#modifications-to-fsc--fsformatc)  
+   - [Shared Path for Shell Built-ins](#shared-path-for-shell-built-ins)  
+   - [New Syscalls](#new-syscalls)  
+5. [File Layout](#file-layout)
+
+</details>
+
 ---
 
-Motivation
-Typical file systems overwrite data in-place, losing historical state. Inspired by persistent data structures, this PFS extension enables time-travel: every change spawns a new read-only snapshot of a file, so users can review or roll back to older versions.
+## Motivation
+Most file systems overwrite data in-place, losing historical state.  
+Inspired by persistent data structures, this PFS implementation enables file versioning.  
+Each change creates a read-only snapshot, allowing inspection and rollback.
 
-Features
-- Hidden Fat File: A per-file hidden directory (new file type: FTYPE_FF) storing all versions.
-- Incremental Timestamps: timestamp in each File record; global last_ts in the superblock that saved on the disk.
-- Space Efficiency: Block pointers are shared between snapshots unless modified.
-- User New Commands:
-  - cd, mkdir and touch.
-  - Append operator >> and O_APPEND flag.
-  - track [-t] <file>: list all versions or restore past versions by specify timestamp.
-  - undo <file>: restore from one version before (a short for track -t -1 <file>).
-- Garbage Collector is helping keep buffer cache clean.
+---
 
-Usage
-Basic File Operations
-All file operations (create, open, read, write) work as before. When a file is first created under PFS, a hidden fat file is created, and current timestamp is stored.
+## Features
+- **Hidden Fat File**  
+  Each file includes a hidden directory (`FTYPE_FF`) that stores all of its snapshots.
 
-Time-Travel via track Command
-$ track myfile.txt         	# Lists all timestamps and their sizes
-$ track -t 3 myfile.txt    	# Restore the version 3 of myfile.txt as a new version
-$ track -t -3 myfile.txt    	# Restore the version last_ts-3 of myfile.txt as a new version
+- **Incremental Timestamps**  
+  Snapshots are timestamped; a global `last_ts` is stored in the superblock and persisted on disk.
 
-touch and >>
-- touch myfile.txt create the fatfile with first initial version.
-- The >> operator automatically creates a new snapshot: each append increments the global timestamp and clones only the metadata pointers.
+- **Efficient Storage**  
+  Block pointers are reused between versions unless modified.
 
-Implementation Details
-Superblock & Global Timestamp
-- Added size_t last_ts; to struct Super in inc/fs.h (loaded from disk in fs_init()).
-- Each new snapshot increments super.last_ts and is persisted on-disk.
+- **New Commands**  
+  - `cd`, `mkdir`, `touch`
+  - Append support via `>>` and `O_APPEND`
+  - `track [-t] <file>` – list or restore versions  
+  - `undo <file>` – revert to the previous version (shorthand for `track -t -1 <file>`)
 
-Fat File Structure
-- Defined #define FTYPE_FF 0x10 for fat file entries.
-- A fat file is a hidden directory; inside, each snapshot is stored as a regular file named by its timestamp.
-- Metadata-only duplication: only block pointers are copied on snapshot creation to save space.
+- **Garbage Collector**  
+  Helps keep the buffer cache clean and optimized.
 
-Modifications to fs.c & fsformat.c
-- fsformat.c: create root-level pfs/ directory on formatting, add first version 0.
-- fs.c:
-  - ff_lookup(path, timestamp, &fileid) to retrieve a version; helps walk_path to navigate into fat file directories.
-  - Update file_create to initialize fat files for new creations.
-  - file_shalldup() clones metadata for writes under PFS.
+---
 
-Shared Path for Shell Built-ins
-- Introduced a shared page at PATH_VA (in inc/lib.h) to maintain the current working directory across shell child processes.
-- Modified sh.c, cd.c, and ls.c to support PATH navigation.
+## Usage
 
-File Layout
-inc/fs.h          # New macros, and shared PATH_VA
-fs/fsformat.c     # Superblock initialization and root pfs/ setup
-fs/fs.c           # Core PFS logic: lookup, dup, create
-fs/serv.c         # update serve_open with two modes for walk_path: WALK_RDONLY, WALK_CREAT
-user/sh.c, cd.c   # Shell updates for shared PATH and >> operator
-user/ls.c         # Listing ff entries and --all behavior
+### Basic File Operations
+All standard file operations (`create`, `open`, `read`, `write`) remain functional.  
+Upon creation under PFS, a hidden fat file is initialized, storing the current timestamp.
 
+### `track` Command
+```sh
+$ track myfile.txt           # List all timestamps and sizes
+$ track -t 3 myfile.txt      # Restore version 3 as a new version
+$ track -t -3 myfile.txt     # Restore (last_ts - 3) as a new version
