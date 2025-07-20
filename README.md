@@ -6,29 +6,6 @@
 This project extends the JOS operating system’s file system with a **Persistent File System (PFS)** layer.  
 Every mutation to a file creates a snapshot, stored in a hidden directory, allowing users to navigate and restore historical versions.
 
----
-
-## Table of Contents
-<details>
-<summary>Click to expand</summary>
-
-1. [Motivation](#motivation)  
-2. [Features](#features)  
-3. [Usage](#usage)  
-   - [Basic File Operations](#basic-file-operations)  
-   - [`track` Command](#track-command)  
-   - [Time-Travel via `touch` and `>>`](#time-travel-via-touch-and-)  
-4. [Implementation Details](#implementation-details)  
-   - [Superblock & Global Timestamp](#superblock--global-timestamp)  
-   - [Fat File Structure](#fat-file-structure)  
-   - [Modifications to `fs.c` & `fsformat.c`](#modifications-to-fsc--fsformatc)  
-   - [Shared Path for Shell Built-ins](#shared-path-for-shell-built-ins)  
-   - [New Syscalls](#new-syscalls)  
-5. [File Layout](#file-layout)
-
-</details>
-
----
 
 ## Motivation
 Most file systems overwrite data in-place, losing historical state.  
